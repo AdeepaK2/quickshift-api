@@ -5,6 +5,9 @@ const morgan = require('morgan');
 const connectDB = require('./config/db');
 require('dotenv').config();
 
+// Import routes
+const userRoutes = require('./routes/userRoutes');
+
 // Initialize Express app
 const app = express();
 
@@ -22,6 +25,9 @@ app.use(morgan('dev'));
 app.get('/', (req, res) => {
   res.json({ message: 'Welcome to QuickShift API' });
 });
+
+// Routes
+app.use('/api/users', userRoutes);
 
 // Define port
 const PORT = process.env.PORT || 5000;
