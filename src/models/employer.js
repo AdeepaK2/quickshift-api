@@ -33,7 +33,16 @@ const employerSchema = new mongoose.Schema({
     type: String,
     trim: true
   },
+  // Authentication and verification
+  verificationToken: String,
+  verificationExpires: Date,
+  resetPasswordToken: String,
+  resetPasswordExpires: Date,
   verified: {
+    type: Boolean,
+    default: false
+  },
+  isVerified: {
     type: Boolean,
     default: false
   },
@@ -56,6 +65,9 @@ const employerSchema = new mongoose.Schema({
   updatedAt: {
     type: Date,
     default: Date.now
+  },
+  lastLoginAt: {
+    type: Date
   }
 }, {
   timestamps: true // Automatically manages createdAt and updatedAt
