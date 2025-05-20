@@ -329,3 +329,96 @@ exports.deleteGigRequest = async (req, res) => {
     });
   }
 };
+
+/**
+ * Apply for a gig request
+ * POST /api/gig-requests/:id/apply
+ */
+exports.applyToGigRequest = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { userId, timeSlots, coverLetter } = req.body;
+    
+    // Validate ObjectIds
+    if (!mongoose.Types.ObjectId.isValid(id) || !mongoose.Types.ObjectId.isValid(userId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid ID format'
+      });
+    }
+    
+    // Check if user exists
+    const user = await mongoose.model('User').findById(userId);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+    
+    // Check if gig request exists
+    const gigRequest = await GigRequest.findById(id);
+    if (!gigRequest) {
+      return res.status(404).json({
+        success: false,
+        message: 'Gig request not found'
+      });
+    }
+    
+    // Check if the gig is accepting applications
+    if (!gigRequest.isAcceptingApplications()) {
+      return res.status(400).json({
+        success: false,
+        message: 'This gig is no longer accepting applications'
+      });
+    }
+    
+    // Check if user has already applied
+    const existingApplicant = gigRequest.applicants.find(app => app.user.toString() === userId);
+    if (existingApplicant) {
+      return res.status(400).json({
+        success: false,
+        message: 'You have already applied for this gig'
+      });
+    }
+    
+    // Add the applicant to the gig request
+    gigRequest.applicants.push({
+      user: userId,
+      status: 'applied',
+      appliedAt: Date.now(),
+      coverLetter: coverLetter || ''
+    });
+    
+    await gigRequest.save();
+    
+    // Create a record in GigApply collection as well for better tracking
+    const GigApply = mongoose.model('GigApply');
+    const application = new GigApply({
+      user: userId,
+      gigRequest: id,
+      timeSlots: timeSlots || [],
+      coverLetter: coverLetter || '',
+      status: 'applied',
+      appliedAt: Date.now()
+    });
+    
+    await application.save();
+    
+    res.status(201).json({
+      success: true,
+      message: 'Application submitted successfully',
+      data: {
+        application,
+        gigRequest
+      }
+    });
+  } catch (error) {
+    console.error('Error applying to gig request:', error);
+    res.status(400).json({
+      success: false,
+      message: 'Failed to apply for this gig',
+      error: error.message
+    });
+  }
+};
