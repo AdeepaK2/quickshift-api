@@ -6,6 +6,9 @@ const gigRequestController = require('../controllers/gigRequestController');
 router.get('/user/:userId', gigRequestController.getGigRequestsByUserId);
 router.get('/employer/:employerId', gigRequestController.getGigRequestsByEmployerId);
 
+// Apply for a gig request - must come BEFORE the /:id route
+router.post('/:id/apply', gigRequestController.applyToGigRequest);
+
 // Base routes for gig requests
 router.post('/', gigRequestController.createGigRequest);
 router.get('/', gigRequestController.getAllGigRequests);
