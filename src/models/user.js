@@ -5,7 +5,7 @@ const userSchema = new mongoose.Schema({
   role: {
     type: String,
     default: 'job_seeker',
-    enum: ['job_seeker', 'admin', 'employer'] // Add roles as needed
+  // Add roles as needed
   },
   email: {
     type: String,
