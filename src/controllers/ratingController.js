@@ -323,9 +323,32 @@ async function updateUserRatingStats(userId) {
 
     const stats = await Rating.calculateUserAverageRating(userId);
 
+    // Calculate recommendation rate
+    const totalRatings = await Rating.countDocuments({ 
+      ratedUser: userId, 
+      status: 'active' 
+    });
+    
+    const recommendedRatings = await Rating.countDocuments({ 
+      ratedUser: userId, 
+      status: 'active',
+      wouldRecommend: true 
+    });
+    
+    const recommendationRate = totalRatings > 0 ? 
+      Math.round((recommendedRatings / totalRatings) * 100) : 0;
+
     // Update user's employment stats
     user.employmentStats.averageRating = Math.round(stats.averageRating * 10) / 10;
     user.employmentStats.totalReviews = stats.totalRatings;
+    user.employmentStats.recommendationRate = recommendationRate;
+    
+    // Update detailed rating breakdown
+    user.employmentStats.ratingBreakdown.punctuality = Math.round(stats.averagePunctuality * 10) / 10;
+    user.employmentStats.ratingBreakdown.quality = Math.round(stats.averageQuality * 10) / 10;
+    user.employmentStats.ratingBreakdown.professionalism = Math.round(stats.averageProfessionalism * 10) / 10;
+    user.employmentStats.ratingBreakdown.communication = Math.round(stats.averageCommunication * 10) / 10;
+    user.employmentStats.ratingBreakdown.reliability = Math.round(stats.averageReliability * 10) / 10;
 
     await user.save();
   } catch (error) {
