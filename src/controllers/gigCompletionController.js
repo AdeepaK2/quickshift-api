@@ -589,3 +589,110 @@ exports.getWorkerGigCompletions = async (req, res) => {
     });
   }
 };
+
+/**
+ * Get workers available for rating for a specific gig completion
+ * GET /api/gig-completions/:gigCompletionId/workers-for-rating
+ */
+exports.getWorkersForRating = async (req, res) => {
+  try {
+    const { gigCompletionId } = req.params;
+
+    // Validate gigCompletionId
+    if (!mongoose.Types.ObjectId.isValid(gigCompletionId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid gig completion ID'
+      });
+    }
+
+    // Find the gig completion record
+    const gigCompletion = await GigCompletion.findById(gigCompletionId)
+      .populate('workers.worker', 'firstName lastName profilePicture email averageRating')
+      .populate('gigRequest', 'title');
+
+    if (!gigCompletion) {
+      return res.status(404).json({
+        success: false,
+        message: 'Gig completion not found'
+      });
+    }
+
+    // Check if the employer is authorized to view this gig completion
+    if (req.userType === 'employer' && gigCompletion.employer.toString() !== req.user._id.toString()) {
+      return res.status(403).json({
+        success: false,
+        message: 'You are not authorized to view this gig completion'
+      });
+    }
+
+    // Check if gig is completed or verified
+    if (gigCompletion.status !== 'completed' && gigCompletion.status !== 'verified') {
+      return res.status(400).json({
+        success: false,
+        message: 'Can only rate workers for completed gigs'
+      });
+    }
+
+    // Get existing ratings to check which workers have already been rated
+    const Rating = require('../models/rating');
+    const existingRatings = await Rating.find({
+      gigCompletion: gigCompletionId,
+      ratedBy: req.user._id
+    }).select('ratedUser workerCompletion');
+
+    // Create map of already rated workers
+    const ratedWorkers = new Set();
+    existingRatings.forEach(rating => {
+      ratedWorkers.add(`${rating.ratedUser}_${rating.workerCompletion}`);
+    });
+
+    // Prepare workers data with rating status
+    const workersForRating = gigCompletion.workers.map(workerCompletion => {
+      const workerKey = `${workerCompletion.worker._id}_${workerCompletion._id}`;
+      const alreadyRated = ratedWorkers.has(workerKey);
+
+      return {
+        workerCompletionId: workerCompletion._id,
+        worker: workerCompletion.worker,
+        payment: {
+          amount: workerCompletion.payment.amount,
+          status: workerCompletion.payment.status
+        },
+        completedTimeSlots: workerCompletion.completedTimeSlots.length,
+        totalHoursWorked: workerCompletion.completedTimeSlots.reduce(
+          (total, slot) => total + slot.hoursWorked, 0
+        ),
+        performance: workerCompletion.performance,
+        alreadyRated,
+        canRate: !alreadyRated && workerCompletion.payment.status === 'paid'
+      };
+    });
+
+    res.status(200).json({
+      success: true,
+      data: {
+        gigCompletion: {
+          _id: gigCompletion._id,
+          gigRequest: gigCompletion.gigRequest,
+          status: gigCompletion.status,
+          completedAt: gigCompletion.completedAt
+        },
+        workers: workersForRating,
+        summary: {
+          totalWorkers: workersForRating.length,
+          workersCanRate: workersForRating.filter(w => w.canRate).length,
+          workersAlreadyRated: workersForRating.filter(w => w.alreadyRated).length
+        }
+      }
+    });
+
+  } catch (error) {
+    console.error('Error getting workers for rating:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching workers for rating',
+      error: error.message
+    });
+  }
+};
