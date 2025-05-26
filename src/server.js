@@ -7,7 +7,10 @@ require('dotenv').config();
 
 // Import routes
 const userRoutes = require('./routes/userRoutes');
+const employerRoutes = require('./routes/employerRoutes');
 const gigRequestRoutes = require('./routes/gigRequestRoutes');
+const gigApplyRoutes = require('./routes/gigApplyRoutes');
+const gigCompletionRoutes = require('./routes/gigCompletionRoutes');
 const ratingRoutes = require('./routes/ratingRoutes');
 
 // Initialize Express app
@@ -30,7 +33,10 @@ app.get('/', (req, res) => {
 
 // Routes
 app.use('/api/users', userRoutes);
+app.use('/api/employers', employerRoutes);
 app.use('/api/gig-requests', gigRequestRoutes);
+app.use('/api/gig-applications', gigApplyRoutes);
+app.use('/api/gig-completions', gigCompletionRoutes);
 app.use('/api/ratings', ratingRoutes);
 
 // Define port

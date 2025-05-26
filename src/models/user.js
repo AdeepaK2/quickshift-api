@@ -141,8 +141,7 @@ const userSchema = new mongoose.Schema({
       }
     }
   },
-  
-  // Employment history and stats
+    // Employment history and stats
   employmentStats: {
     totalGigsCompleted: {
       type: Number,
@@ -162,6 +161,39 @@ const userSchema = new mongoose.Schema({
       type: Number,
       default: 0
     },
+    // Detailed rating breakdowns
+    ratingBreakdown: {
+      punctuality: {
+        type: Number,
+        default: 0,
+        min: 0,
+        max: 5
+      },
+      quality: {
+        type: Number,
+        default: 0,
+        min: 0,
+        max: 5
+      },
+      professionalism: {
+        type: Number,
+        default: 0,
+        min: 0,
+        max: 5
+      },
+      communication: {
+        type: Number,
+        default: 0,
+        min: 0,
+        max: 5
+      },
+      reliability: {
+        type: Number,
+        default: 0,
+        min: 0,
+        max: 5
+      }
+    },
     reliabilityScore: {
       type: Number,
       default: 0,
@@ -169,6 +201,12 @@ const userSchema = new mongoose.Schema({
       max: 100
     },
     completionRate: {
+      type: Number,
+      default: 0,
+      min: 0,
+      max: 100
+    },
+    recommendationRate: {
       type: Number,
       default: 0,
       min: 0,
