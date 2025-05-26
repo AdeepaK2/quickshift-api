@@ -8,6 +8,7 @@ require('dotenv').config();
 const userRoutes = require('./routes/userRoutes');
 const gigRequestRoutes = require('./routes/gigRequestRoutes');
 const gigApplyRoutes = require('./routes/gigApplyRoutes');
+const gigCompletionRoutes = require('./routes/gigCompletionRoutes');
 
 // Initialize Express app
 const app = express();
@@ -28,5 +29,6 @@ app.get('/', (req, res) => {
 app.use('/api/users', userRoutes);
 app.use('/api/gig-requests', gigRequestRoutes);
 app.use('/api/gig-applications', gigApplyRoutes);
+app.use('/api/gig-completions', gigCompletionRoutes);
 
 module.exports = app;
