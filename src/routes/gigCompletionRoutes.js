@@ -26,4 +26,7 @@ router.get('/:id', gigCompletionController.getGigCompletionById);
 // Get gig completions for a specific worker
 router.get('/worker/:workerId', gigCompletionController.getWorkerGigCompletions);
 
+// Get workers available for rating for a specific gig completion
+router.get('/:gigCompletionId/workers-for-rating', gigCompletionController.getWorkersForRating);
+
 module.exports = router;
