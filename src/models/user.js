@@ -5,7 +5,7 @@ const userSchema = new mongoose.Schema({
   role: {
     type: String,
     default: 'job_seeker',
-    enum: ['job_seeker', 'admin', 'employer'] // Add roles as needed
+  // Add roles as needed
   },
   email: {
     type: String,
@@ -94,9 +94,129 @@ const userSchema = new mongoose.Schema({
   updatedAt: {
     type: Date,
     default: Date.now
-  },
-  lastLoginAt: {
+  },  lastLoginAt: {
     type: Date
+  },
+  
+  // Payment information for receiving payments
+  paymentInfo: {
+    preferredPaymentMethod: {
+      type: String,
+      enum: ['bank_transfer', 'paypal', 'mobile_money', 'cash', 'other'],
+    },
+    bankDetails: {
+      accountName: {
+        type: String,
+        trim: true
+      },
+      accountNumber: {
+        type: String,
+        trim: true
+      },
+      bankName: {
+        type: String,
+        trim: true
+      },
+      routingNumber: {
+        type: String,
+        trim: true
+      },
+      swiftCode: {
+        type: String,
+        trim: true
+      }
+    },
+    paypalEmail: {
+      type: String,
+      trim: true,
+      lowercase: true
+    },
+    mobileMoneyNumber: {
+      type: String,
+      trim: true
+    },
+    taxInformation: {
+      taxId: {
+        type: String,
+        trim: true
+      },
+      taxClassification: {
+        type: String,
+        trim: true
+      }
+    }
+  },
+    // Employment history and stats
+  employmentStats: {
+    totalGigsCompleted: {
+      type: Number,
+      default: 0
+    },
+    totalEarnings: {
+      type: Number,
+      default: 0
+    },
+    averageRating: {
+      type: Number,
+      default: 0,
+      min: 0,
+      max: 5
+    },
+    totalReviews: {
+      type: Number,
+      default: 0
+    },
+    // Detailed rating breakdowns
+    ratingBreakdown: {
+      punctuality: {
+        type: Number,
+        default: 0,
+        min: 0,
+        max: 5
+      },
+      quality: {
+        type: Number,
+        default: 0,
+        min: 0,
+        max: 5
+      },
+      professionalism: {
+        type: Number,
+        default: 0,
+        min: 0,
+        max: 5
+      },
+      communication: {
+        type: Number,
+        default: 0,
+        min: 0,
+        max: 5
+      },
+      reliability: {
+        type: Number,
+        default: 0,
+        min: 0,
+        max: 5
+      }
+    },
+    reliabilityScore: {
+      type: Number,
+      default: 0,
+      min: 0,
+      max: 100
+    },
+    completionRate: {
+      type: Number,
+      default: 0,
+      min: 0,
+      max: 100
+    },
+    recommendationRate: {
+      type: Number,
+      default: 0,
+      min: 0,
+      max: 100
+    }
   }
 }, {
   timestamps: true // Automatically manages createdAt and updatedAt

@@ -2,23 +2,16 @@ const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
-const connectDB = require('./config/db');
 require('dotenv').config();
 
 // Import routes
 const userRoutes = require('./routes/userRoutes');
-const employerRoutes = require('./routes/employerRoutes');
 const gigRequestRoutes = require('./routes/gigRequestRoutes');
 const gigApplyRoutes = require('./routes/gigApplyRoutes');
 const gigCompletionRoutes = require('./routes/gigCompletionRoutes');
-const ratingRoutes = require('./routes/ratingRoutes');
-const authRoutes = require('./routes/authRoutes');
 
 // Initialize Express app
 const app = express();
-
-// Connect to database
-connectDB();
 
 // Middleware
 app.use(express.json());
@@ -34,28 +27,8 @@ app.get('/', (req, res) => {
 
 // Routes
 app.use('/api/users', userRoutes);
-app.use('/api/employers', employerRoutes);
 app.use('/api/gig-requests', gigRequestRoutes);
 app.use('/api/gig-applications', gigApplyRoutes);
 app.use('/api/gig-completions', gigCompletionRoutes);
-app.use('/api/ratings', ratingRoutes);
-app.use('/api/auth', authRoutes);
 
-// Error handling middleware
-app.use((err, req, res, next) => {
-  console.error(err.stack);
-  const statusCode = err.statusCode || 500;
-  res.status(statusCode).json({
-    success: false,
-    message: err.message || 'Internal Server Error',
-    stack: process.env.NODE_ENV === 'production' ? '🥞' : err.stack
-  });
-});
-
-// Define port
-const PORT = process.env.PORT || 5000;
-
-// Start server
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-});
+module.exports = app;
