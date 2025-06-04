@@ -73,6 +73,11 @@ const userSchema = new mongoose.Schema({
     latitude: Number,
     longitude: Number
   },
+  // Authentication and verification
+  verificationToken: String,
+  verificationExpires: Date,
+  resetPasswordToken: String,
+  resetPasswordExpires: Date,
   // Account status
   isActive: {
     type: Boolean,
