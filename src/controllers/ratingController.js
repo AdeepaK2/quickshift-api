@@ -357,9 +357,9 @@ async function updateUserRatingStats(userId) {
 }
 
 module.exports = {
-  createRating,
-  getUserRatings,
-  getUserRatingStats,
-  updateRating,
-  deleteRating
+  createRating: exports.createRating,
+  getUserRatings: exports.getUserRatings,
+  getUserRatingStats: exports.getUserRatingStats,
+  updateRating: exports.updateRating,
+  deleteRating: exports.deleteRating
 };

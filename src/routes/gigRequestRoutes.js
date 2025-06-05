@@ -6,6 +6,9 @@ const gigRequestController = require('../controllers/gigRequestController');
 router.get('/user/:userId', gigRequestController.getGigRequestsByUserId);
 router.get('/employer/:employerId', gigRequestController.getGigRequestsByEmployerId);
 
+// Instant apply eligible jobs route - must come BEFORE the /:id route
+router.get('/instant-apply-eligible', gigRequestController.getInstantApplyEligibleJobs);
+
 // Apply for a gig request - must come BEFORE the /:id route
 router.post('/:id/apply', gigRequestController.applyToGigRequest);
 

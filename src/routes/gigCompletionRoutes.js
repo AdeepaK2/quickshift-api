@@ -11,8 +11,16 @@ router.put('/:id/worker/:workerId', gigCompletionController.updateWorkerTimeSlot
 // Update worker's performance evaluation
 router.put('/:id/worker/:workerId/performance', gigCompletionController.updateWorkerPerformance);
 
-// Process payment for a gig
+// Process payment for a gig (creates Stripe payment intent)
 router.post('/:id/process-payment', gigCompletionController.processPayment);
+
+// Confirm payment and distribute funds to workers
+router.post('/:id/confirm-payment', gigCompletionController.confirmPayment);
+
+// Stripe Connect account management for workers
+router.post('/create-worker-account', gigCompletionController.createWorkerStripeAccount);
+router.post('/create-onboarding-link', gigCompletionController.createOnboardingLink);
+router.get('/worker-account-status/:userId', gigCompletionController.checkWorkerAccountStatus);
 
 // Mark gig as completed
 router.put('/:id/complete', gigCompletionController.completeGig);

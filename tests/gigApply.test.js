@@ -4,9 +4,10 @@ const app = require('../src/app');
 const GigApply = require('../src/models/gigApply');
 const GigRequest = require('../src/models/gigRequest');
 const User = require('../src/models/user');
+const Employer = require('../src/models/employer');
 
 // Test data
-const employerId = '681b43c557193b3619f8499b';
+let employerId;
 let userId;
 let gigRequestId;
 let applicationId;
@@ -28,6 +29,21 @@ const sampleApplication = {
 beforeAll(async () => {
   // Connect to your actual MongoDB
   await mongoose.connect(process.env.MONGO_DB_URI);
+  
+  // Create a test employer if one doesn't exist
+  const testEmployer = await Employer.findOne({ email: 'testemployer@example.com' });
+  if (testEmployer) {
+    employerId = testEmployer._id.toString();
+  } else {
+    const newEmployer = await Employer.create({
+      email: 'testemployer@example.com',
+      password: 'password123',
+      companyName: 'Test Company',
+      contactNumber: '1234567890',
+      verified: true
+    });
+    employerId = newEmployer._id.toString();
+  }
   
   // Create a test user if one doesn't exist
   const testUser = await User.findOne({ email: 'testuser@example.com' });
@@ -64,11 +80,14 @@ beforeAll(async () => {
         endTime: new Date('2025-06-01T17:00:00'),
         peopleNeeded: 5,
         peopleAssigned: 0
-      }],
-      location: {
+      }],      location: {
         address: '123 Test Street',
         city: 'Test City',
-        postalCode: '12345'
+        postalCode: '12345',
+        coordinates: {
+          latitude: 43.6532,
+          longitude: -79.3832
+        }
       },
       status: 'open',
       totalPositions: 5,

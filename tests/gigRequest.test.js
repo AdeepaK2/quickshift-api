@@ -5,8 +5,8 @@ const app = require('../src/app');
 const GigRequest = require('../src/models/gigRequest');
 const Employer = require('../src/models/employer');
 
-// Test data - using the existing employer ID
-const employerId = '681b43c557193b3619f8499b';
+// Test data - will be set in beforeAll
+let employerId;
 
 // Sample gig request data
 const sampleGigRequest = {
@@ -50,9 +50,27 @@ const sampleGigRequest = {
 beforeAll(async () => {
   // Connect to your actual MongoDB instead of memory server
   await mongoose.connect(process.env.MONGO_DB_URI);
+  
+  // Create a test employer if one doesn't exist
+  const testEmployer = await Employer.findOne({ email: 'test@company.com' });
+  if (testEmployer) {
+    employerId = testEmployer._id.toString();
+  } else {
+    const newEmployer = await Employer.create({
+      companyName: 'Test Company',
+      email: 'test@company.com',
+      password: 'testpassword123',
+      contactNumber: '1234567890',
+      isVerified: true
+    });
+    employerId = newEmployer._id.toString();
+  }
 });
 
 afterAll(async () => {
+  // Clean up test data
+  await GigRequest.deleteMany({ title: { $in: ['Test Gig Request', 'Another Gig', 'Second Gig for Employer', 'Another Employer Gig', 'Updated Gig Title'] } });
+  await Employer.findByIdAndDelete(employerId);
   await mongoose.disconnect();
 });
 
@@ -70,10 +88,9 @@ describe('GigRequest API Endpoints', () => {
         .post('/api/gig-requests')
         .send(sampleGigRequest)
         .expect(201);
-      
-      expect(response.body.success).toBe(true);
+        expect(response.body.success).toBe(true);
       expect(response.body.data.title).toBe(sampleGigRequest.title);
-      expect(response.body.data.employer.toString()).toBe(employerId);
+      expect(response.body.data.employer._id.toString()).toBe(employerId);
     });
     
     it('should return error if required fields are missing', async () => {

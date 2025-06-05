@@ -6,15 +6,21 @@ const Employer = require('../src/models/employer');
 const GigRequest = require('../src/models/gigRequest');
 const GigCompletion = require('../src/models/gigCompletion');
 const Rating = require('../src/models/rating');
+const connectDB = require('../src/config/db');
+
+// Set a higher timeout for all tests
+jest.setTimeout(30000);
 
 // Test data
 let testUser, testEmployer, testGigRequest, testGigCompletion;
 let userToken, employerToken;
 
 describe('Rating API', () => {
+  let connection;
+  
   beforeAll(async () => {
     // Connect to test database
-    await mongoose.connect(process.env.TEST_DATABASE_URL || 'mongodb://localhost:27017/quickshift_test');
+    connection = await connectDB();
     
     // Clear test data
     await Promise.all([
@@ -41,19 +47,35 @@ describe('Rating API', () => {
       companyName: 'Test Company',
       email: 'employer@test.com',
       password: 'password123'
-    });
-
-    // Create test gig request
+    });    // Create test gig request
     testGigRequest = await GigRequest.create({
       title: 'Test Gig',
       description: 'Test gig description',
+      category: 'Testing',
       employer: testEmployer._id,
-      jobType: 'part_time',
-      location: 'Test Location',
-      paymentType: 'hourly',
-      paymentAmount: 15,
-      requiredWorkers: 1,
-      status: 'completed'
+      payRate: {
+        amount: 15,
+        rateType: 'hourly'
+      },
+      timeSlots: [{
+        date: new Date('2025-06-01'),
+        startTime: new Date('2025-06-01T09:00:00'),
+        endTime: new Date('2025-06-01T17:00:00'),
+        peopleNeeded: 1,
+        peopleAssigned: 1
+      }],
+      location: {
+        address: '123 Test St',
+        city: 'Test City',
+        postalCode: '12345',
+        coordinates: {
+          latitude: 43.6532,
+          longitude: -79.3832
+        }
+      },
+      status: 'completed',
+      totalPositions: 1,
+      filledPositions: 1
     });
 
     // Create test gig completion
@@ -118,10 +140,11 @@ describe('Rating API', () => {
       Rating.deleteMany({})
     ]);
   });
-
   afterAll(async () => {
     // Close database connection
-    await mongoose.connection.close();
+    if (connection) {
+      await mongoose.connection.close();
+    }
   });
 
   describe('POST /api/ratings/gig-completion/:gigCompletionId/worker/:workerCompletionId/user/:ratedUserId', () => {

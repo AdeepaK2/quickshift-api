@@ -53,10 +53,15 @@ const gigApplySchema = new mongoose.Schema({
     type: Date,
     default: Date.now
   },
-  
-  // Additional fields
+    // Additional fields
   resume: {
     type: String  // URL or path to resume file
+  },
+  
+  // Flag for instant/one-click applications
+  isInstantApply: {
+    type: Boolean,
+    default: false
   },
   
   // Response from employer
