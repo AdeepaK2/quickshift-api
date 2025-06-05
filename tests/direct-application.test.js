@@ -50,11 +50,14 @@ beforeAll(async () => {
         endTime: new Date('2025-06-01T17:00:00'),
         peopleNeeded: 5,
         peopleAssigned: 0
-      }],
-      location: {
+      }],      location: {
         address: '123 Test Street',
         city: 'Test City',
-        postalCode: '12345'
+        postalCode: '12345',
+        coordinates: {
+          latitude: 43.6532,
+          longitude: -79.3832
+        }
       },
       status: 'open',
       totalPositions: 5,

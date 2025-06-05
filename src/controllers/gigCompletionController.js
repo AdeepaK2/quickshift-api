@@ -3,6 +3,7 @@ const GigRequest = require('../models/gigRequest');
 const GigApply = require('../models/gigApply');
 const User = require('../models/user');
 const Employer = require('../models/employer');
+const stripeService = require('../services/stripeService');
 const mongoose = require('mongoose');
 
 /**
@@ -265,6 +266,10 @@ exports.updateWorkerPerformance = async (req, res) => {
  * Process payment for a gig
  * POST /api/gig-completions/:id/process-payment
  */
+/**
+ * Process payment for a completed gig using Stripe
+ * POST /api/gig-completions/:id/process-payment
+ */
 exports.processPayment = async (req, res) => {
   try {
     const { id } = req.params;
@@ -278,8 +283,11 @@ exports.processPayment = async (req, res) => {
       });
     }
 
-    // Find the completion record
-    const gigCompletion = await GigCompletion.findById(id);
+    // Find the completion record with populated references
+    const gigCompletion = await GigCompletion.findById(id)
+      .populate('employer')
+      .populate('workers.worker');
+      
     if (!gigCompletion) {
       return res.status(404).json({
         success: false,
@@ -295,23 +303,56 @@ exports.processPayment = async (req, res) => {
       });
     }
 
-    // In a real application, you would integrate with a payment processor here
-    // For now, we'll simulate a successful payment
+    // Check if payment already exists
+    if (gigCompletion.paymentSummary.stripe?.paymentIntentId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Payment already initiated for this gig completion'
+      });
+    }
 
     // Generate invoice number
     const invoiceNumber = `INV-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
     
-    // Update payment status for all workers
-    gigCompletion.workers.forEach(worker => {
-      worker.payment.status = 'processing';
-      worker.payment.paymentMethod = paymentMethod;
-      worker.payment.transactionId = `TXN-${Date.now()}-${worker._id.toString().substring(0, 5)}`;
-    });
+    // Create Stripe payment intent for the employer to pay
+    const paymentIntentData = {
+      amount: gigCompletion.paymentSummary.finalAmount,
+      currency: 'usd',
+      gigCompletionId: id,
+      employerId: gigCompletion.employer._id.toString(),
+      metadata: {
+        invoiceNumber,
+        totalWorkers: gigCompletion.workers.length,
+        gigTitle: gigCompletion.gigRequest?.title || 'QuickShift Gig'
+      }
+    };
 
-    // Update payment summary
+    const paymentResult = await stripeService.createPaymentIntent(paymentIntentData);
+
+    if (!paymentResult.success) {
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to create payment intent',
+        error: paymentResult.error
+      });
+    }
+
+    // Update payment summary with Stripe information
     gigCompletion.paymentSummary.paymentStatus = 'processing';
     gigCompletion.paymentSummary.invoiceNumber = invoiceNumber;
     gigCompletion.paymentSummary.invoiceDate = new Date();
+    gigCompletion.paymentSummary.stripe = {
+      paymentIntentId: paymentResult.paymentIntent.id,
+      paymentIntentStatus: paymentResult.paymentIntent.status,
+      clientSecret: paymentResult.clientSecret
+    };
+
+    // Update worker payment statuses
+    gigCompletion.workers.forEach(worker => {
+      worker.payment.status = 'processing';
+      worker.payment.paymentMethod = paymentMethod;
+      worker.payment.transactionId = `PI-${paymentResult.paymentIntent.id}-${worker._id.toString().substring(0, 5)}`;
+    });
     
     // Add notes if provided
     if (notes) {
@@ -320,38 +361,15 @@ exports.processPayment = async (req, res) => {
     
     await gigCompletion.save();
 
-    // In a real application, you might want to create a background job for payment processing
-    // For demo purposes, we'll update the status immediately
-      // Simulate payment processing delay
-    setTimeout(async () => {
-      try {
-        // Fetch the document again to avoid version conflicts
-        const updatedGigCompletion = await GigCompletion.findById(id);
-        if (updatedGigCompletion) {
-          // Update payment statuses to paid
-          updatedGigCompletion.workers.forEach(worker => {
-            worker.payment.status = 'paid';
-            worker.payment.paymentDate = new Date();
-          });
-          
-          updatedGigCompletion.paymentSummary.paymentStatus = 'completed';
-          
-          await updatedGigCompletion.save();
-          
-          // You might want to send notifications to workers here
-        }
-      } catch (error) {
-        console.error('Error finalizing payment:', error);
-      }
-    }, 2000); // 2 second delay to simulate processing
-
     res.status(200).json({
       success: true,
-      message: 'Payment processing initiated successfully',
+      message: 'Payment intent created successfully. Please complete payment using the client secret.',
       data: {
         invoiceNumber: gigCompletion.paymentSummary.invoiceNumber,
         totalAmount: gigCompletion.paymentSummary.totalAmount,
         finalAmount: gigCompletion.paymentSummary.finalAmount,
+        clientSecret: paymentResult.clientSecret,
+        paymentIntentId: paymentResult.paymentIntent.id,
         status: 'processing'
       }
     });
@@ -692,6 +710,400 @@ exports.getWorkersForRating = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Error fetching workers for rating',
+      error: error.message
+    });
+  }
+};
+
+/**
+ * Confirm payment and distribute funds to workers
+ * POST /api/gig-completions/:id/confirm-payment
+ */
+exports.confirmPayment = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { paymentIntentId } = req.body;
+
+    // Validate ID
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid completion ID'
+      });
+    }
+
+    // Find the completion record with populated references
+    const gigCompletion = await GigCompletion.findById(id)
+      .populate('workers.worker');
+      
+    if (!gigCompletion) {
+      return res.status(404).json({
+        success: false,
+        message: 'Gig completion record not found'
+      });
+    }
+
+    // Verify the payment intent matches
+    if (gigCompletion.paymentSummary.stripe?.paymentIntentId !== paymentIntentId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Payment intent ID does not match'
+      });
+    }
+
+    // Get payment intent status from Stripe
+    const paymentIntentResult = await stripeService.getPaymentIntent(paymentIntentId);
+    
+    if (!paymentIntentResult.success) {
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to retrieve payment intent',
+        error: paymentIntentResult.error
+      });
+    }
+
+    const paymentIntent = paymentIntentResult.paymentIntent;
+
+    // Check if payment was successful
+    if (paymentIntent.status !== 'succeeded') {
+      return res.status(400).json({
+        success: false,
+        message: `Payment not successful. Status: ${paymentIntent.status}`
+      });
+    }
+
+    // Update payment summary status
+    gigCompletion.paymentSummary.stripe.paymentIntentStatus = paymentIntent.status;
+    gigCompletion.paymentSummary.stripe.chargeId = paymentIntent.latest_charge;
+    gigCompletion.paymentSummary.stripe.paymentDate = new Date();
+    gigCompletion.paymentSummary.paymentStatus = 'completed';
+
+    // Prepare worker data for payment distribution
+    const workersForDistribution = [];
+    
+    for (let worker of gigCompletion.workers) {
+      const user = worker.worker;
+      
+      // Check if worker has Stripe Connect account
+      if (!user.stripe?.accountId) {
+        // Worker needs to set up Stripe Connect account
+        worker.payment.status = 'failed';
+        worker.payment.transactionId = `ERROR-NO-STRIPE-${Date.now()}`;
+        continue;
+      }
+
+      workersForDistribution.push({
+        workerId: user._id.toString(),
+        amount: worker.payment.amount,
+        stripeAccountId: user.stripe.accountId
+      });
+    }
+
+    // Distribute payments to workers with Stripe Connect accounts
+    if (workersForDistribution.length > 0) {
+      const distributionResult = await stripeService.distributePayment({
+        paymentIntentId,
+        workers: workersForDistribution,
+        gigCompletionId: id
+      });
+
+      // Update worker payment statuses based on distribution results
+      if (distributionResult.success) {
+        distributionResult.transfers.forEach(transfer => {
+          const worker = gigCompletion.workers.find(w => 
+            w.worker._id.toString() === transfer.workerId
+          );
+          if (worker) {
+            worker.payment.status = 'paid';
+            worker.payment.paymentDate = new Date();
+            worker.payment.stripe = {
+              transferId: transfer.transfer.id,
+              transferStatus: transfer.transfer.status || 'paid',
+              transferDate: new Date(),
+              accountId: transfer.transfer.destination
+            };
+          }
+        });
+
+        // Handle any errors in distribution
+        distributionResult.errors.forEach(error => {
+          const worker = gigCompletion.workers.find(w => 
+            w.worker._id.toString() === error.workerId
+          );
+          if (worker) {
+            worker.payment.status = 'failed';
+            worker.payment.transactionId = `ERROR-${Date.now()}`;
+          }
+        });
+      }
+    }
+
+    await gigCompletion.save();
+
+    // Update worker employment stats
+    const successfulWorkers = gigCompletion.workers.filter(w => w.payment.status === 'paid');
+    for (let worker of successfulWorkers) {
+      await User.findByIdAndUpdate(worker.worker._id, {
+        $inc: {
+          'employmentStats.totalGigsCompleted': 1,
+          'employmentStats.totalEarnings': worker.payment.amount
+        }
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'Payment confirmed and distributed successfully',
+      data: {
+        paymentIntentId,
+        totalAmount: gigCompletion.paymentSummary.totalAmount,
+        finalAmount: gigCompletion.paymentSummary.finalAmount,
+        workersDistributed: workersForDistribution.length,
+        successfulPayments: successfulWorkers.length,
+        failedPayments: gigCompletion.workers.length - successfulWorkers.length,
+        status: 'completed'
+      }
+    });
+  } catch (error) {
+    console.error('Error confirming payment:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error confirming payment',
+      error: error.message
+    });
+  }
+};
+
+/**
+ * Create Stripe Connect account for worker
+ * POST /api/gig-completions/create-worker-account
+ */
+exports.createWorkerStripeAccount = async (req, res) => {
+  try {
+    const { userId, country = 'US' } = req.body;
+
+    // Validate user ID
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid user ID'
+      });
+    }
+
+    // Find the user
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    // Check if user already has a Stripe account
+    if (user.stripe?.accountId) {
+      return res.status(400).json({
+        success: false,
+        message: 'User already has a Stripe Connect account',
+        accountId: user.stripe.accountId
+      });
+    }
+
+    // Create Stripe Connect account
+    const accountData = {
+      email: user.email,
+      country,
+      individual: {
+        first_name: user.firstName,
+        last_name: user.lastName,
+        email: user.email
+      }
+    };
+
+    const accountResult = await stripeService.createConnectAccount(accountData);
+
+    if (!accountResult.success) {
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to create Stripe Connect account',
+        error: accountResult.error
+      });
+    }
+
+    // Update user with Stripe account information
+    user.stripe = {
+      accountId: accountResult.account.id,
+      accountStatus: 'pending',
+      onboardingCompleted: false,
+      chargesEnabled: accountResult.account.charges_enabled,
+      payoutsEnabled: accountResult.account.payouts_enabled,
+      lastOnboardingUpdate: new Date()
+    };
+
+    await user.save();
+
+    res.status(200).json({
+      success: true,
+      message: 'Stripe Connect account created successfully',
+      data: {
+        accountId: accountResult.account.id,
+        accountStatus: 'pending',
+        needsOnboarding: true
+      }
+    });
+  } catch (error) {
+    console.error('Error creating worker Stripe account:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error creating Stripe Connect account',
+      error: error.message
+    });
+  }
+};
+
+/**
+ * Create onboarding link for worker Stripe Connect account
+ * POST /api/gig-completions/create-onboarding-link
+ */
+exports.createOnboardingLink = async (req, res) => {
+  try {
+    const { userId, refreshUrl, returnUrl } = req.body;
+
+    // Validate user ID
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid user ID'
+      });
+    }
+
+    // Find the user
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    // Check if user has a Stripe account
+    if (!user.stripe?.accountId) {
+      return res.status(400).json({
+        success: false,
+        message: 'User does not have a Stripe Connect account. Please create one first.'
+      });
+    }
+
+    // Create account link
+    const linkResult = await stripeService.createAccountLink(
+      user.stripe.accountId,
+      refreshUrl || `${process.env.FRONTEND_URL}/stripe/refresh`,
+      returnUrl || `${process.env.FRONTEND_URL}/stripe/return`
+    );
+
+    if (!linkResult.success) {
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to create onboarding link',
+        error: linkResult.error
+      });
+    }
+
+    // Update user with onboarding link
+    user.stripe.onboardingLink = linkResult.accountLink.url;
+    user.stripe.lastOnboardingUpdate = new Date();
+    await user.save();
+
+    res.status(200).json({
+      success: true,
+      message: 'Onboarding link created successfully',
+      data: {
+        onboardingUrl: linkResult.accountLink.url,
+        accountId: user.stripe.accountId
+      }
+    });
+  } catch (error) {
+    console.error('Error creating onboarding link:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error creating onboarding link',
+      error: error.message
+    });
+  }
+};
+
+/**
+ * Check worker Stripe account status
+ * GET /api/gig-completions/worker-account-status/:userId
+ */
+exports.checkWorkerAccountStatus = async (req, res) => {
+  try {
+    const { userId } = req.params;
+
+    // Validate user ID
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid user ID'
+      });
+    }
+
+    // Find the user
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    if (!user.stripe?.accountId) {
+      return res.status(200).json({
+        success: true,
+        data: {
+          hasAccount: false,
+          accountStatus: 'none',
+          needsAccount: true
+        }
+      });
+    }
+
+    // Get account details from Stripe
+    const accountResult = await stripeService.getAccountDetails(user.stripe.accountId);
+
+    if (!accountResult.success) {
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to retrieve account details',
+        error: accountResult.error
+      });
+    }
+
+    const account = accountResult.account;
+
+    // Update user account status
+    user.stripe.chargesEnabled = account.charges_enabled;
+    user.stripe.payoutsEnabled = account.payouts_enabled;
+    user.stripe.onboardingCompleted = account.details_submitted;
+    user.stripe.accountStatus = account.charges_enabled && account.payouts_enabled ? 'enabled' : 'pending';
+    await user.save();
+
+    res.status(200).json({
+      success: true,
+      data: {
+        hasAccount: true,
+        accountId: account.id,
+        accountStatus: user.stripe.accountStatus,
+        onboardingCompleted: account.details_submitted,
+        chargesEnabled: account.charges_enabled,
+        payoutsEnabled: account.payouts_enabled,
+        canReceivePayments: account.charges_enabled && account.payouts_enabled
+      }
+    });
+  } catch (error) {
+    console.error('Error checking worker account status:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error checking account status',
       error: error.message
     });
   }

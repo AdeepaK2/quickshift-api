@@ -90,8 +90,7 @@ const workerCompletionSchema = new mongoose.Schema({
       },
       deductionReason: {
         type: String
-      }
-    },
+      }    },
     paymentMethod: {
       type: String
     },
@@ -103,6 +102,22 @@ const workerCompletionSchema = new mongoose.Schema({
     },
     receipt: {
       type: String  // URL or path to receipt file
+    },
+    // Stripe-specific fields
+    stripe: {
+      transferId: {
+        type: String  // Stripe transfer ID for this worker
+      },
+      transferStatus: {
+        type: String,
+        enum: ['pending', 'paid', 'failed', 'canceled', 'reversed']
+      },
+      transferDate: {
+        type: Date
+      },
+      accountId: {
+        type: String  // Worker's Stripe Connect account ID
+      }
     }
   },
   
@@ -191,6 +206,32 @@ const gigCompletionSchema = new mongoose.Schema({
       type: String,
       enum: ['pending', 'processing', 'partial', 'completed', 'refunded'],
       default: 'pending'
+    },
+    // Stripe payment integration fields
+    stripe: {
+      paymentIntentId: {
+        type: String  // Stripe payment intent ID
+      },
+      paymentIntentStatus: {
+        type: String,
+        enum: ['requires_payment_method', 'requires_confirmation', 'requires_action', 'processing', 'succeeded', 'canceled']
+      },
+      clientSecret: {
+        type: String  // For frontend payment confirmation
+      },
+      chargeId: {
+        type: String  // Stripe charge ID after successful payment
+      },
+      paymentDate: {
+        type: Date
+      },
+      refunds: [{
+        refundId: String,
+        amount: Number,
+        reason: String,
+        date: Date,
+        status: String
+      }]
     }
   },
   

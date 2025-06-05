@@ -5,6 +5,9 @@ const gigApplyController = require('../controllers/gigApplyController');
 // Apply for a gig
 router.post('/', gigApplyController.applyForGig);
 
+// Instant/One-click apply for a gig (mobile-optimized)
+router.post('/instant-apply', gigApplyController.instantApplyForGig);
+
 // Get all applications for a specific gig request
 router.get('/gig/:gigRequestId', gigApplyController.getApplicationsByGigRequestId);
 
