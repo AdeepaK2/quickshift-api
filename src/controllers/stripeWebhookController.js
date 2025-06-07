@@ -313,10 +313,5 @@ async function handleAccountAuthorized(account) {
 
     console.log(`Account authorized for user ${user._id}: ${account.id}`);
   } catch (error) {
-    console.error('Error handling account authorized:', error);
-  }
+    console.error('Error handling account authorized:', error);  }
 }
-
-module.exports = {
-  handleStripeWebhook
-};
