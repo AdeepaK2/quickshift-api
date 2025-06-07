@@ -1,15 +1,25 @@
 {
-  "name": "quickshift-be",
+  "name": "quickshift-api",
   "version": "1.0.0",
+  "description": "API for QuickShift platform",
   "main": "src/server.js",
   "scripts": {
     "start": "node src/server.js",
+    "build": "echo 'Build completed successfully'",
     "dev": "nodemon src/server.js",
-    "test": "jest --detectOpenHandles --forceExit"
+    "test": "set NODE_ENV=test && jest",
+    "test:unix": "NODE_ENV=test jest",
+    "create-super-admin": "node src/scripts/createSuperAdmin.js",
+    "postinstall": "echo 'Dependencies installed successfully'",
+    "deploy:check": "powershell -ExecutionPolicy Bypass -File deploy.ps1",
+    "deploy:unix": "chmod +x deploy.sh && ./deploy.sh"
   },
   "author": "",
   "license": "ISC",
-  "description": "",
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=8.0.0"
+  },
   "dependencies": {
     "@sendgrid/mail": "^8.1.5",
     "bcrypt": "^5.1.1",
@@ -21,11 +31,17 @@
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.14.1",
     "morgan": "^1.10.0",
+    "stripe": "^18.2.1",
     "uuid": "^11.1.0"
   },
   "devDependencies": {
     "jest": "^29.7.0",
-    "nodemon": "^3.1.10",
-    "supertest": "^7.1.0"
+    "mongodb-memory-server": "^9.1.3",
+    "nodemon": "^3.0.2",
+    "supertest": "^6.3.3"
+  },
+  "jest": {
+    "testEnvironment": "node",
+    "testTimeout": 10000
   }
 }

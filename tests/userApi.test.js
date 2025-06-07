@@ -4,7 +4,10 @@ const express = require('express');
 const cors = require('cors');
 const userRoutes = require('../src/routes/userRoutes');
 const User = require('../src/models/user');
-require('dotenv').config();
+
+// Load test environment configuration
+const path = require('path');
+require('dotenv').config({ path: path.resolve(process.cwd(), '.env.test') });
 
 // Create express app for testing
 const app = express();

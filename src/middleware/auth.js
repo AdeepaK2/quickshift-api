@@ -79,3 +79,25 @@ exports.authorize = (...roles) => {
     next();
   };
 };
+
+// Admin-only authorization
+exports.adminOnly = (req, res, next) => {
+  if (req.userType !== 'user' || !['admin', 'super_admin'].includes(req.user.role)) {
+    return res.status(403).json({
+      success: false,
+      message: 'Admin access required'
+    });
+  }
+  next();
+};
+
+// Super admin only authorization
+exports.superAdminOnly = (req, res, next) => {
+  if (req.userType !== 'user' || req.user.role !== 'super_admin') {
+    return res.status(403).json({
+      success: false,
+      message: 'Super admin access required'
+    });
+  }
+  next();
+};

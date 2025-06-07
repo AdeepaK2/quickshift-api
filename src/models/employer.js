@@ -41,6 +41,11 @@ const employerSchema = new mongoose.Schema({
   verified: {
     type: Boolean,
     default: false
+  },  ratings: {
+  },
+  isVerified: {
+    type: Boolean,
+    default: false
   },
   isVerified: {
     type: Boolean,
@@ -58,6 +63,91 @@ const employerSchema = new mongoose.Schema({
       default: 0
     }
   },
+  
+  // Payment information for making payments
+  paymentInfo: {
+    preferredPaymentMethod: {
+      type: String,
+      enum: ['bank_transfer', 'credit_card', 'paypal', 'mobile_money', 'other'],
+    },
+    bankDetails: {
+      accountName: {
+        type: String,
+        trim: true
+      },
+      accountNumber: {
+        type: String,
+        trim: true
+      },
+      bankName: {
+        type: String,
+        trim: true
+      }
+    },
+    creditCards: [{
+      cardId: {
+        type: String
+      },
+      last4: {
+        type: String
+      },
+      expiryMonth: {
+        type: Number
+      },
+      expiryYear: {
+        type: Number
+      },
+      brand: {
+        type: String
+      },
+      isDefault: {
+        type: Boolean,
+        default: false
+      }
+    }],
+    paypalEmail: {
+      type: String,
+      trim: true,
+      lowercase: true
+    },
+    taxInformation: {
+      taxId: {
+        type: String,
+        trim: true
+      },
+      taxClassification: {
+        type: String,
+        trim: true
+      }
+    }
+  },
+  
+  // Hiring history and statistics
+  hiringStats: {
+    totalGigsCreated: {
+      type: Number,
+      default: 0
+    },
+    totalGigsCompleted: {
+      type: Number,
+      default: 0
+    },
+    totalAmountPaid: {
+      type: Number,
+      default: 0
+    },
+    averagePaymentSpeed: {
+      type: Number,  // Days
+      default: 0
+    },
+    reliabilityScore: {
+      type: Number,
+      default: 0,
+      min: 0,
+      max: 100
+    }
+  },
+  
   createdAt: {
     type: Date,
     default: Date.now
