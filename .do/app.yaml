@@ -1,0 +1,37 @@
+name: quickshift-api
+services:
+- name: api
+  source_dir: /
+  github:
+    repo: your-username/quickshift-api
+    branch: main
+  run_command: npm start
+  build_command: npm install && npm run build
+  environment_slug: node-js
+  instance_count: 1
+  instance_size_slug: basic-xxs
+  routes:
+  - path: /
+  health_check:
+    http_path: /
+  envs:
+  - key: NODE_ENV
+    value: production
+  - key: PORT
+    value: "8080"
+  # Add your environment variables here
+  # - key: MONGODB_URI
+  #   value: your-mongodb-connection-string
+  # - key: JWT_SECRET
+  #   value: your-jwt-secret
+  # - key: SENDGRID_API_KEY
+  #   value: your-sendgrid-api-key
+  # - key: STRIPE_SECRET_KEY
+  #   value: your-stripe-secret-key
+  # - key: STRIPE_WEBHOOK_SECRET
+  #   value: your-stripe-webhook-secret
+
+databases:
+- name: quickshift-db
+  engine: MONGODB
+  version: "6"

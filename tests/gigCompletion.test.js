@@ -81,11 +81,14 @@ describe('Gig Completion API', () => {
         endTime: endTime,
         peopleNeeded: 2,
         peopleAssigned: 1
-      }],
-      location: {
+      }],      location: {
         address: '123 Test St',
         city: 'Test City',
-        postalCode: '12345'
+        postalCode: '12345',
+        coordinates: {
+          latitude: 43.6532,
+          longitude: -79.3832
+        }
       },
       requirements: {
         skills: ['Customer Service'],

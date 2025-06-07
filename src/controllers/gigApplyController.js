@@ -1,6 +1,7 @@
 const GigApply = require('../models/gigApply');
 const GigRequest = require('../models/gigRequest');
 const User = require('../models/user');
+const notificationService = require('../services/notificationService');
 const mongoose = require('mongoose');
 
 /**
@@ -162,14 +163,25 @@ exports.updateApplicationStatus = async (req, res) => {
       { 
         $set: { 'applicants.$.status': status }
       }
-    );
-
-    // If the user is hired, update the filledPositions count
+    );    // If the user is hired, update the filledPositions count
     if (status === 'hired') {
       await GigRequest.findByIdAndUpdate(
         application.gigRequest,
         { $inc: { filledPositions: 1 } }
       );
+    }
+
+    // Send application status update notification
+    try {
+      const user = await User.findById(application.user);
+      const gigRequest = await GigRequest.findById(application.gigRequest);
+      
+      if (user && gigRequest) {
+        await notificationService.sendApplicationStatusUpdate(user, gigRequest, status);
+      }
+    } catch (notificationError) {
+      console.error('Error sending application status notification:', notificationError);
+      // Don't fail the entire operation if notification fails
     }
 
     res.status(200).json({
@@ -439,6 +451,129 @@ exports.updateApplicationFeedback = async (req, res) => {
     res.status(400).json({
       success: false,
       message: 'Failed to update application feedback',
+      error: error.message
+    });
+  }
+};
+
+/**
+ * One-click/Instant apply for a gig (mobile-optimized)
+ * POST /api/gig-applications/instant-apply
+ */
+exports.instantApplyForGig = async (req, res) => {
+  try {
+    const { userId, gigRequestId } = req.body;
+
+    // Validate ObjectIds
+    if (!mongoose.Types.ObjectId.isValid(userId) || !mongoose.Types.ObjectId.isValid(gigRequestId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid user ID or gig request ID'
+      });
+    }    // Check if user exists
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    // Check if user profile is complete enough for instant apply
+    const profileCheck = user.isReadyForInstantApply();
+    if (!profileCheck.ready) {
+      return res.status(400).json({
+        success: false,
+        message: 'Profile incomplete for instant apply',
+        missingFields: profileCheck.missing,
+        suggestion: 'Please complete your profile to use instant apply feature'
+      });
+    }
+
+    // Check if gig request exists
+    const gigRequest = await GigRequest.findById(gigRequestId).populate('employer', 'companyName');
+    if (!gigRequest) {
+      return res.status(404).json({
+        success: false,
+        message: 'Gig request not found'
+      });
+    }
+
+    // Check if gig is still open for applications
+    if (!gigRequest.isAcceptingApplications()) {
+      return res.status(400).json({
+        success: false,
+        message: 'This gig is no longer accepting applications'
+      });
+    }
+
+    // Check if user has already applied
+    const existingApplication = await GigApply.findOne({
+      user: userId,
+      gigRequest: gigRequestId
+    });
+
+    if (existingApplication) {
+      return res.status(400).json({
+        success: false,
+        message: 'You have already applied for this gig'
+      });
+    }    // For instant apply, use intelligent defaults:
+    // - Apply to all available time slots
+    // - Generate personalized cover letter based on user profile
+    const defaultCoverLetter = user.generateInstantApplyCoverLetter(gigRequest);
+
+    // Apply to all time slots by default for instant apply
+    const allTimeSlots = gigRequest.timeSlots.map(slot => ({
+      slotId: slot._id,
+      date: slot.date,
+      startTime: slot.startTime,
+      endTime: slot.endTime
+    }));
+
+    // Create application
+    const gigApply = new GigApply({
+      user: userId,
+      gigRequest: gigRequestId,
+      timeSlots: allTimeSlots,
+      coverLetter: defaultCoverLetter,
+      status: 'applied',
+      appliedAt: new Date(),
+      isInstantApply: true // Flag to track instant applications
+    });
+
+    await gigApply.save();
+
+    // Update the gigRequest with the new applicant
+    await GigRequest.findByIdAndUpdate(
+      gigRequestId,
+      {
+        $push: {
+          applicants: {
+            user: userId,
+            status: 'applied',
+            appliedAt: new Date(),
+            coverLetter: defaultCoverLetter
+          }
+        }
+      }
+    );
+
+    res.status(201).json({
+      success: true,
+      message: 'Application submitted successfully via instant apply!',
+      data: {
+        application: gigApply,
+        appliedToAllSlots: allTimeSlots.length,
+        gigTitle: gigRequest.title,
+        company: gigRequest.employer.companyName
+      }
+    });
+  } catch (error) {
+    console.error('Error with instant apply:', error);
+    res.status(400).json({
+      success: false,
+      message: 'Failed to submit instant application',
       error: error.message
     });
   }

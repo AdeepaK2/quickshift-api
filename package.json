@@ -2,14 +2,22 @@
   "name": "quickshift-api",
   "version": "1.0.0",
   "description": "API for QuickShift platform",
-  "main": "src/server.js",
-  "scripts": {
+  "main": "src/server.js",  "scripts": {
     "start": "node src/server.js",
+    "build": "echo 'Build completed successfully'",
     "dev": "nodemon src/server.js",
-    "test": "jest"
-  },
-  "author": "",
+    "test": "set NODE_ENV=test && jest",
+    "test:unix": "NODE_ENV=test jest",
+    "create-super-admin": "node src/scripts/createSuperAdmin.js",
+    "postinstall": "echo 'Dependencies installed successfully'",
+    "deploy:check": "powershell -ExecutionPolicy Bypass -File deploy.ps1",
+    "deploy:unix": "chmod +x deploy.sh && ./deploy.sh"
+  },"author": "",
   "license": "ISC",
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=8.0.0"
+  },
   "dependencies": {
     "@sendgrid/mail": "^8.1.5",
     "bcrypt": "^5.1.1",
@@ -21,6 +29,7 @@
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.14.1",
     "morgan": "^1.10.0",
+    "stripe": "^18.2.1",
     "uuid": "^11.1.0"
   },
   "devDependencies": {

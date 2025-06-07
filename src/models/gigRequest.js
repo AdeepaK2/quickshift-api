@@ -65,8 +65,7 @@ const gigRequestSchema = new mongoose.Schema({
   
   // Time slots (for single or multiple days with different times)
   timeSlots: [timeSlotSchema],
-  
-  // Location details
+    // Location details
   location: {
     address: {
       type: String,
@@ -84,10 +83,22 @@ const gigRequestSchema = new mongoose.Schema({
     },
     coordinates: {
       latitude: {
-        type: Number
+        type: Number,
+        required: true,
+        min: -90,
+        max: 90
       },
       longitude: {
-        type: Number
+        type: Number,
+        required: true,
+        min: -180,
+        max: 180
+      },
+      // GeoJSON Point for MongoDB geospatial queries
+      type: {
+        type: String,
+        enum: ['Point'],
+        default: 'Point'
       }
     }
   },
