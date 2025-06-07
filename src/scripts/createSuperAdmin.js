@@ -5,9 +5,8 @@ require('dotenv').config();
 
 // Script to create the first super admin user
 async function createFirstSuperAdmin() {
-  try {
-    // Connect to database
-    await mongoose.connect(process.env.MONGODB_URI);
+  try {    // Connect to database
+    await mongoose.connect(process.env.MONGO_DB_URI);
     console.log('Connected to MongoDB');
 
     // Check if super admin already exists
