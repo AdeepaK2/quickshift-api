@@ -19,6 +19,7 @@ const ratingRoutes = require('./routes/ratingRoutes');
 const adminRoutes = require('./routes/adminRoutes');
 const notificationRoutes = require('./routes/notificationRoutes');
 const webhookRoutes = require('./routes/webhookRoutes');
+const publicTestRoutes = require('./routes/publicTestRoutes');
 
 // Initialize Express app
 const app = express();
@@ -48,6 +49,7 @@ app.get('/api/health', (req, res) => {
 });
 
 // Routes
+app.use('/api/public', publicTestRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/employers', employerRoutes);
