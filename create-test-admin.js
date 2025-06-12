@@ -23,31 +23,20 @@ async function createTestAdmin() {
     if (existingAdmin) {
       console.log('Admin with this email already exists:', email);
       console.log('Updating password...');
-      
-      // Hash the new password
-      const saltRounds = 12;
-      const hashedPassword = await bcrypt.hash(password, saltRounds);
-      
-      // Update the password
-      existingAdmin.password = hashedPassword;
+      // Save plain password so pre-save hook hashes it
+      existingAdmin.password = password;
       await existingAdmin.save();
-      
       console.log('Password updated for admin:', email);
     } else {
-      // Hash password
-      const saltRounds = 12;
-      const hashedPassword = await bcrypt.hash(password, saltRounds);
-      
-      // Create admin user
+      // Create admin user with plain password
       const admin = new Admin({
         email,
-        password: hashedPassword,
+        password, // Save plain password
         firstName,
         lastName,
         role: 'admin',
         isActive: true
       });
-
       await admin.save();
       console.log('Test admin created successfully!');
       console.log('Email:', email);
