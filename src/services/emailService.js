@@ -44,7 +44,7 @@ class EmailService {
   /**
    * Send welcome email to new users
    * @param {Object} user - User object
-   * @param {string} userType - User type (user or employer)
+   * @param {string} userType - User type (user, employer, admin)
    */
   async sendWelcomeEmail(user, userType) {
     const name = userType === 'employer' ? user.companyName : `${user.firstName} ${user.lastName}`;
@@ -59,38 +59,101 @@ class EmailService {
   }
 
   /**
-   * Send verification email
+   * Send password reset OTP email
    * @param {Object} user - User object
-   * @param {string} token - Verification token
-   * @param {string} userType - User type (user or employer)
+   * @param {string} otp - OTP code
+   * @param {string} userType - User type (user, employer, admin)
    */
-  async sendVerificationEmail(user, token, userType) {
+  async sendPasswordResetOTP(user, otp, userType) {
     const name = userType === 'employer' ? user.companyName : `${user.firstName} ${user.lastName}`;
-    const verificationUrl = `${process.env.FRONTEND_URL}/verify-email/${token}`;
-    const template = templates.verificationEmail(name, verificationUrl);
+    const template = templates.passwordResetOTP(name, otp);
     
     await this.sendEmail({
       to: user.email,
-      subject: 'Please Verify Your Email Address',
+      subject: 'Password Reset OTP - QuickShift',
       html: template.html,
       text: template.text
     });
   }
 
   /**
-   * Send password reset email
+   * Send login OTP email (if needed for future use)
    * @param {Object} user - User object
-   * @param {string} token - Reset token
-   * @param {string} userType - User type (user or employer)
+   * @param {string} otp - OTP code
+   * @param {string} userType - User type (user, employer, admin)
    */
-  async sendPasswordResetEmail(user, token, userType) {
+  async sendLoginOTP(user, otp, userType) {
     const name = userType === 'employer' ? user.companyName : `${user.firstName} ${user.lastName}`;
-    const resetUrl = `${process.env.FRONTEND_URL}/reset-password/${token}`;
-    const template = templates.passwordResetEmail(name, resetUrl);
+    const template = templates.loginOTP(name, otp);
     
     await this.sendEmail({
       to: user.email,
-      subject: 'Password Reset Request',
+      subject: 'Login Verification OTP - QuickShift',
+      html: template.html,
+      text: template.text
+    });
+  }
+
+  /**
+   * Send new job alert
+   * @param {Object} user - User object
+   * @param {Object} gigRequest - Gig request object
+   */
+  async sendNewJobAlert(user, gigRequest) {
+    const template = templates.newJobAlert(user, gigRequest);
+    
+    await this.sendEmail({
+      to: user.email,
+      subject: '🚀 New Job Alert - QuickShift',
+      html: template.html,
+      text: template.text
+    });
+  }
+
+  /**
+   * Send application status update
+   * @param {Object} user - User object
+   * @param {Object} gigRequest - Gig request object
+   * @param {string} status - Application status
+   */
+  async sendApplicationStatusUpdate(user, gigRequest, status) {
+    const template = templates.applicationStatusUpdate(user, gigRequest, status);
+    
+    await this.sendEmail({
+      to: user.email,
+      subject: 'Application Status Update - QuickShift',
+      html: template.html,
+      text: template.text
+    });
+  }
+
+  /**
+   * Send job recommendations
+   * @param {Object} user - User object
+   * @param {Array} recommendedJobs - Array of recommended jobs
+   */
+  async sendJobRecommendations(user, recommendedJobs) {
+    const template = templates.jobRecommendations(user, recommendedJobs);
+    
+    await this.sendEmail({
+      to: user.email,
+      subject: '💼 Job Recommendations - QuickShift',
+      html: template.html,
+      text: template.text
+    });
+  }
+
+  /**
+   * Send job closing soon notification
+   * @param {Object} user - User object
+   * @param {Object} gigRequest - Gig request object
+   */
+  async sendJobClosingSoon(user, gigRequest) {
+    const template = templates.jobClosingSoon(user, gigRequest);
+    
+    await this.sendEmail({
+      to: user.email,
+      subject: '⏰ Job Closing Soon - QuickShift',
       html: template.html,
       text: template.text
     });
