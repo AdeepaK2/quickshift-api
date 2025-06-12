@@ -9,11 +9,10 @@ const refreshTokenSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     refPath: 'userModel',
     required: true
-  },
-  userModel: {
+  },  userModel: {
     type: String,
     required: true,
-    enum: ['User', 'Employer']
+    enum: ['User', 'Employer', 'Admin']
   },
   expiresAt: {
     type: Date,

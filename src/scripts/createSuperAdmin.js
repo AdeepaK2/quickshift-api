@@ -1,16 +1,14 @@
 const mongoose = require('mongoose');
 const bcrypt = require('bcrypt');
-const User = require('../models/user');
+const Admin = require('../models/admin');
 require('dotenv').config();
 
 // Script to create the first super admin user
 async function createFirstSuperAdmin() {
   try {    // Connect to database
     await mongoose.connect(process.env.MONGO_DB_URI);
-    console.log('Connected to MongoDB');
-
-    // Check if super admin already exists
-    const existingSuperAdmin = await User.findOne({ role: 'super_admin' });
+    console.log('Connected to MongoDB');    // Check if super admin already exists
+    const existingSuperAdmin = await Admin.findOne({ role: 'super_admin' });
     if (existingSuperAdmin) {
       console.log('Super admin already exists:', existingSuperAdmin.email);
       process.exit(0);
@@ -20,21 +18,17 @@ async function createFirstSuperAdmin() {
     const email = process.argv[2] || 'superadmin@quickshift.com';
     const password = process.argv[3] || 'SuperAdmin123!';
     const firstName = process.argv[4] || 'Super';
-    const lastName = process.argv[5] || 'Admin';
-
-    // Check if user with email already exists
-    const existingUser = await User.findOne({ email });
-    if (existingUser) {
-      console.error('User with this email already exists:', email);
+    const lastName = process.argv[5] || 'Admin';    // Check if admin with email already exists
+    const existingAdmin = await Admin.findOne({ email });
+    if (existingAdmin) {
+      console.error('Admin with this email already exists:', email);
       process.exit(1);
     }
 
     // Hash password
     const saltRounds = 12;
-    const hashedPassword = await bcrypt.hash(password, saltRounds);
-
-    // Create super admin user
-    const superAdmin = new User({
+    const hashedPassword = await bcrypt.hash(password, saltRounds);    // Create super admin user
+    const superAdmin = new Admin({
       email,
       password: hashedPassword,
       firstName,
