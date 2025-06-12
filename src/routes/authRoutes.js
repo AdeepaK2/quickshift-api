@@ -43,6 +43,7 @@ router.post('/login',
 
 // Admin login
 router.post('/admin/login', 
+  (req, res, next) => { req.body.userType = 'admin'; next(); },
   adminLoginValidation, 
   validate, 
   authController.login

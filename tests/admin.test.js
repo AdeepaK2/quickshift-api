@@ -3,6 +3,7 @@ const mongoose = require('mongoose');
 const { MongoMemoryServer } = require('mongodb-memory-server');
 const app = require('../src/app');
 const User = require('../src/models/user');
+const Admin = require('../src/models/admin');
 
 describe('Admin API', () => {
   let mongoServer;
@@ -20,7 +21,7 @@ describe('Admin API', () => {
 
     // Create test users (password will be hashed by pre-save middleware)
     // Create super admin
-    superAdminUser = await User.create({
+    superAdminUser = await Admin.create({
       email: 'superadmin@test.com',
       password: 'testpassword',
       firstName: 'Super',
@@ -30,7 +31,7 @@ describe('Admin API', () => {
     });
 
     // Create regular admin
-    adminUser = await User.create({
+    adminUser = await Admin.create({
       email: 'admin@test.com',
       password: 'testpassword',
       firstName: 'Regular',
@@ -49,7 +50,7 @@ describe('Admin API', () => {
       isActive: true
     });// Get tokens for authentication
     const superAdminLoginRes = await request(app)
-      .post('/api/auth/login')
+      .post('/api/auth/admin/login')
       .send({
         email: 'superadmin@test.com',
         password: 'testpassword'
@@ -57,7 +58,7 @@ describe('Admin API', () => {
     superAdminToken = superAdminLoginRes.body.data.tokens.accessToken;
 
     const adminLoginRes = await request(app)
-      .post('/api/auth/login')
+      .post('/api/auth/admin/login')
       .send({
         email: 'admin@test.com',
         password: 'testpassword'

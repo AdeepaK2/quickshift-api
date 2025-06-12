@@ -24,6 +24,9 @@ const publicTestRoutes = require('./routes/publicTestRoutes');
 // Initialize Express app
 const app = express();
 
+// Import debug controller
+
+
 // Webhook routes (must come before body parsing middleware)
 app.use('/api/webhooks', webhookRoutes);
 
@@ -51,6 +54,9 @@ app.get('/api/health', (req, res) => {
 // Routes
 app.use('/api/public', publicTestRoutes);
 app.use('/api/auth', authRoutes);
+
+// Debug route for admin login
+
 app.use('/api/users', userRoutes);
 app.use('/api/employers', employerRoutes);
 app.use('/api/gig-requests', gigRequestRoutes);

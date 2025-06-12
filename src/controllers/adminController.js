@@ -1,4 +1,5 @@
 const User = require('../models/user');
+const Admin = require('../models/admin');
 const Employer = require('../models/employer');
 const GigRequest = require('../models/gigRequest');
 const GigCompletion = require('../models/gigCompletion');
@@ -7,14 +8,23 @@ const bcrypt = require('bcrypt');
 // Create admin user
 exports.createAdmin = async (req, res) => {
   try {
-    const { email, password, firstName, lastName, role = 'admin' } = req.body;
+    const { email, password, firstName, lastName, role = 'admin', phone, permissions } = req.body;
 
-    // Check if user already exists
+    // Check if admin already exists
+    const existingAdmin = await Admin.findOne({ email });
+    if (existingAdmin) {
+      return res.status(400).json({
+        success: false,
+        message: 'Admin with this email already exists'
+      });
+    }
+
+    // Also check if this email is used by a regular user or employer
     const existingUser = await User.findOne({ email });
     if (existingUser) {
       return res.status(400).json({
         success: false,
-        message: 'User with this email already exists'
+        message: 'A user with this email already exists'
       });
     }
 
@@ -34,19 +44,24 @@ exports.createAdmin = async (req, res) => {
       });
     }
 
-    // Hash password
-    const saltRounds = 12;
-    const hashedPassword = await bcrypt.hash(password, saltRounds);
-
-    // Create admin user
-    const admin = new User({
+    // Create admin user with the Admin model
+    const admin = new Admin({
       email,
-      password: hashedPassword,
+      password, // Will be hashed by the pre-save hook
       firstName,
       lastName,
       role,
+      phone,
       isActive: true
     });
+
+    // Set custom permissions if provided
+    if (permissions && Object.keys(permissions).length > 0) {
+      admin.permissions = {
+        ...admin.permissions,
+        ...permissions
+      };
+    }
 
     await admin.save();
 
@@ -76,23 +91,30 @@ exports.getAllAdmins = async (req, res) => {
     const limit = parseInt(req.query.limit) || 10;
     const skip = (page - 1) * limit;
 
-    const filter = { role: { $in: ['admin', 'super_admin'] } };
+    const filter = {};
     
-    // Add additional filters
+    // Add filters
     if (req.query.role && ['admin', 'super_admin'].includes(req.query.role)) {
       filter.role = req.query.role;
     }
     if (req.query.isActive !== undefined) {
       filter.isActive = req.query.isActive === 'true';
     }
+    if (req.query.search) {
+      filter.$or = [
+        { email: { $regex: req.query.search, $options: 'i' } },
+        { firstName: { $regex: req.query.search, $options: 'i' } },
+        { lastName: { $regex: req.query.search, $options: 'i' } }
+      ];
+    }
 
-    const admins = await User.find(filter)
+    const admins = await Admin.find(filter)
       .select('-password')
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit);
 
-    const total = await User.countDocuments(filter);
+    const total = await Admin.countDocuments(filter);
 
     res.status(200).json({
       success: true,
@@ -115,10 +137,7 @@ exports.getAllAdmins = async (req, res) => {
 // Get admin by ID
 exports.getAdminById = async (req, res) => {
   try {
-    const admin = await User.findOne({ 
-      _id: req.params.id, 
-      role: { $in: ['admin', 'super_admin'] } 
-    }).select('-password');
+    const admin = await Admin.findById(req.params.id).select('-password');
 
     if (!admin) {
       return res.status(404).json({
@@ -144,13 +163,10 @@ exports.getAdminById = async (req, res) => {
 // Update admin
 exports.updateAdmin = async (req, res) => {
   try {
-    const { role, ...updateData } = req.body;
+    const { role, permissions, ...updateData } = req.body;
 
     // Check if admin exists
-    const admin = await User.findOne({ 
-      _id: req.params.id, 
-      role: { $in: ['admin', 'super_admin'] } 
-    });
+    const admin = await Admin.findById(req.params.id);
 
     if (!admin) {
       return res.status(404).json({
@@ -171,7 +187,7 @@ exports.updateAdmin = async (req, res) => {
 
       // Cannot demote the last super_admin
       if (admin.role === 'super_admin' && role !== 'super_admin') {
-        const superAdminCount = await User.countDocuments({ role: 'super_admin' });
+        const superAdminCount = await Admin.countDocuments({ role: 'super_admin' });
         if (superAdminCount <= 1) {
           return res.status(400).json({
             success: false,
@@ -183,13 +199,38 @@ exports.updateAdmin = async (req, res) => {
       updateData.role = role;
     }
 
-    // Hash password if provided
-    if (updateData.password) {
-      const saltRounds = 12;
-      updateData.password = await bcrypt.hash(updateData.password, saltRounds);
+    // Handle permissions update
+    if (permissions) {
+      // Only super_admin can change certain permissions
+      if (req.user.role !== 'super_admin' && 
+         (permissions.canCreateAdmin || permissions.canDeleteAdmin || permissions.canAccessFinancials)) {
+        return res.status(403).json({
+          success: false,
+          message: 'Only super administrators can grant these permissions'
+        });
+      }
+
+      // Update only the permissions that were provided
+      updateData.permissions = {
+        ...admin.permissions,
+        ...permissions
+      };
     }
 
-    const updatedAdmin = await User.findByIdAndUpdate(
+    // If the role changed to super_admin, update all permissions to true
+    if (updateData.role === 'super_admin' && admin.role !== 'super_admin') {
+      updateData.permissions = {
+        canCreateAdmin: true,
+        canDeleteAdmin: true,
+        canManageUsers: true,
+        canManageEmployers: true,
+        canManageGigs: true,
+        canAccessFinancials: true,
+        canManageSettings: true
+      };
+    }
+
+    const updatedAdmin = await Admin.findByIdAndUpdate(
       req.params.id,
       updateData,
       { new: true, runValidators: true }
@@ -213,10 +254,7 @@ exports.updateAdmin = async (req, res) => {
 // Delete admin
 exports.deleteAdmin = async (req, res) => {
   try {
-    const admin = await User.findOne({ 
-      _id: req.params.id, 
-      role: { $in: ['admin', 'super_admin'] } 
-    });
+    const admin = await Admin.findById(req.params.id);
 
     if (!admin) {
       return res.status(404).json({
@@ -225,7 +263,18 @@ exports.deleteAdmin = async (req, res) => {
       });
     }
 
-    // Cannot delete super_admin unless you are super_admin
+    // Regular admins can only be deleted by super admins or admins with canDeleteAdmin permission
+    if (admin.role === 'admin') {
+      if (req.user.role !== 'super_admin' && 
+         (!req.user.permissions || !req.user.permissions.canDeleteAdmin)) {
+        return res.status(403).json({
+          success: false,
+          message: 'You do not have permission to delete admin accounts'
+        });
+      }
+    }
+
+    // Super admins can only be deleted by other super admins
     if (admin.role === 'super_admin' && req.user.role !== 'super_admin') {
       return res.status(403).json({
         success: false,
@@ -235,7 +284,7 @@ exports.deleteAdmin = async (req, res) => {
 
     // Cannot delete the last super_admin
     if (admin.role === 'super_admin') {
-      const superAdminCount = await User.countDocuments({ role: 'super_admin' });
+      const superAdminCount = await Admin.countDocuments({ role: 'super_admin' });
       if (superAdminCount <= 1) {
         return res.status(400).json({
           success: false,
@@ -244,7 +293,15 @@ exports.deleteAdmin = async (req, res) => {
       }
     }
 
-    await User.findByIdAndDelete(req.params.id);
+    // Cannot delete yourself
+    if (admin._id.toString() === req.user.id) {
+      return res.status(400).json({
+        success: false,
+        message: 'You cannot delete your own admin account'
+      });
+    }
+
+    await Admin.findByIdAndDelete(req.params.id);
 
     res.status(200).json({
       success: true,
@@ -276,7 +333,7 @@ exports.getDashboardStats = async (req, res) => {
       GigRequest.countDocuments(),
       GigRequest.countDocuments({ status: 'active' }),
       GigCompletion.countDocuments({ status: 'completed' }),
-      User.countDocuments({ role: { $in: ['admin', 'super_admin'] } })
+      Admin.countDocuments()
     ]);
 
     // Get recent activities (last 30 days)
