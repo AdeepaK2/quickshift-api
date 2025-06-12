@@ -1,5 +1,6 @@
 const User = require('../models/user');
 const Employer = require('../models/employer');
+const Admin = require('../models/admin');
 const RefreshToken = require('../models/refreshToken');
 const OTP = require('../models/otp');
 const { generateAccessToken, generateRefreshToken, verifyToken } = require('../config/jwt');
@@ -156,23 +157,43 @@ exports.login = async (req, res) => {
     
     let user;
     let model;
-    
-    // Check if it's an employer, admin, or user login
+      // Check if it's an employer, admin, or user login
     if (userType === 'employer') {
       user = await Employer.findOne({ email });
       model = 'Employer';
+      // Check if employer is active
+      if (user && user.isActive === false) {
+        return res.status(403).json({
+          success: false,
+          message: 'Employer account is inactive. Please contact support.'
+        });
+      }
     } else if (userType === 'admin') {
-      user = await User.findOne({ 
+      user = await Admin.findOne({ 
         email, 
         role: { $in: ['admin', 'super_admin'] } 
       });
-      model = 'User';
+      model = 'Admin';
+      // Check if admin is active
+      if (user && user.isActive === false) {
+        return res.status(403).json({
+          success: false,
+          message: 'Admin account is inactive. Please contact support.'
+        });
+      }
     } else {
       user = await User.findOne({ 
         email,
         role: 'job_seeker' 
       });
       model = 'User';
+      // Check if user is active
+      if (user && user.isActive === false) {
+        return res.status(403).json({
+          success: false,
+          message: 'User account is inactive. Please contact support.'
+        });
+      }
     }
     
     // Check if user exists
@@ -362,7 +383,7 @@ exports.forgotPassword = async (req, res) => {
       user = await Employer.findOne({ email });
       actualUserType = 'employer';
     } else if (userType === 'admin') {
-      user = await User.findOne({ 
+      user = await Admin.findOne({ 
         email, 
         role: { $in: ['admin', 'super_admin'] } 
       });
@@ -458,17 +479,16 @@ exports.resetPassword = async (req, res) => {
     
     let user;
     let model;
-    
-    // Find user based on type
+      // Find user based on type
     if (userType === 'employer') {
       user = await Employer.findOne({ email });
       model = 'Employer';
     } else if (userType === 'admin') {
-      user = await User.findOne({ 
+      user = await Admin.findOne({ 
         email, 
         role: { $in: ['admin', 'super_admin'] } 
       });
-      model = 'User';
+      model = 'Admin';
     } else {
       user = await User.findOne({ 
         email,
@@ -548,7 +568,7 @@ exports.resendOTP = async (req, res) => {
       user = await Employer.findOne({ email });
       actualUserType = 'employer';
     } else if (userType === 'admin') {
-      user = await User.findOne({ 
+      user = await Admin.findOne({ 
         email, 
         role: { $in: ['admin', 'super_admin'] } 
       });

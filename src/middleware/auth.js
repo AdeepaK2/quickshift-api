@@ -1,6 +1,7 @@
 const { verifyToken } = require('../config/jwt');
 const User = require('../models/user');
 const Employer = require('../models/employer');
+const Admin = require('../models/admin');
 
 // Protect routes - verify JWT token
 exports.protect = async (req, res, next) => {
@@ -31,22 +32,24 @@ exports.protect = async (req, res, next) => {
         message: 'Token is invalid or expired'
       });
     }
-    
-    // Set user or employer to req object
+      // Set user, admin or employer to req object
     if (decoded.role === 'employer') {
       req.user = await Employer.findById(decoded.id).select('-password');
+      req.userType = 'employer';
+    } else if (decoded.role === 'admin' || decoded.role === 'super_admin') {
+      req.user = await Admin.findById(decoded.id).select('-password');
+      req.userType = 'admin';
     } else {
       req.user = await User.findById(decoded.id).select('-password');
+      req.userType = 'user';
     }
     
     if (!req.user) {
       return res.status(401).json({
         success: false,
-        message: 'User or employer belonging to this token no longer exists'
+        message: 'Account belonging to this token no longer exists'
       });
     }
-    
-    req.userType = decoded.role === 'employer' ? 'employer' : 'user';
     next();
   } catch (error) {
     console.error('Auth middleware error:', error);
@@ -82,7 +85,7 @@ exports.authorize = (...roles) => {
 
 // Admin-only authorization
 exports.adminOnly = (req, res, next) => {
-  if (req.userType !== 'user' || !['admin', 'super_admin'].includes(req.user.role)) {
+  if (req.userType !== 'admin') {
     return res.status(403).json({
       success: false,
       message: 'Admin access required'
@@ -93,7 +96,7 @@ exports.adminOnly = (req, res, next) => {
 
 // Super admin only authorization
 exports.superAdminOnly = (req, res, next) => {
-  if (req.userType !== 'user' || req.user.role !== 'super_admin') {
+  if (req.userType !== 'admin' || req.user.role !== 'super_admin') {
     return res.status(403).json({
       success: false,
       message: 'Super admin access required'

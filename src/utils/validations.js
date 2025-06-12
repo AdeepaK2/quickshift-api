@@ -44,7 +44,7 @@ const loginValidation = [
     .notEmpty().withMessage('Password is required'),
   body('userType')
     .optional()
-    .isIn(['user', 'employer', 'admin']).withMessage('Invalid user type')
+    .isIn(['user', 'employer', 'admin', 'super_admin']).withMessage('Invalid user type')
 ];
 
 // Password reset request validation
@@ -54,7 +54,7 @@ const forgotPasswordValidation = [
     .normalizeEmail(),
   body('userType')
     .optional()
-    .isIn(['user', 'employer', 'admin']).withMessage('Invalid user type')
+    .isIn(['user', 'employer', 'admin', 'super_admin']).withMessage('Invalid user type')
 ];
 
 // OTP verification validation
@@ -90,7 +90,7 @@ const resetPasswordValidation = [
     }),
   body('userType')
     .optional()
-    .isIn(['user', 'employer', 'admin']).withMessage('Invalid user type')
+    .isIn(['user', 'employer', 'admin', 'super_admin']).withMessage('Invalid user type')
 ];
 
 // Refresh token validation
@@ -107,7 +107,8 @@ const adminLoginValidation = [
   body('password')
     .notEmpty().withMessage('Password is required'),
   body('userType')
-    .equals('admin').withMessage('User type must be admin')
+    .custom((value) => value === 'admin' || value === 'super_admin')
+    .withMessage('User type must be admin or super_admin')
 ];
 
 // Resend OTP validation
@@ -120,7 +121,7 @@ const resendOTPValidation = [
     .withMessage('Invalid OTP purpose'),
   body('userType')
     .optional()
-    .isIn(['user', 'employer', 'admin']).withMessage('Invalid user type')
+    .isIn(['user', 'employer', 'admin', 'super_admin']).withMessage('Invalid user type')
 ];
 
 // Change password validation (for logged-in users)
