@@ -2,7 +2,8 @@
   "name": "quickshift-api",
   "version": "1.0.0",
   "description": "API for QuickShift platform",
-  "main": "src/server.js",  "scripts": {
+  "main": "src/server.js",
+  "scripts": {
     "start": "node src/server.js",
     "build": "echo 'Build completed successfully'",
     "dev": "nodemon src/server.js",
@@ -12,7 +13,8 @@
     "postinstall": "echo 'Dependencies installed successfully'",
     "deploy:check": "powershell -ExecutionPolicy Bypass -File deploy.ps1",
     "deploy:unix": "chmod +x deploy.sh && ./deploy.sh"
-  },"author": "",
+  },
+  "author": "",
   "license": "ISC",
   "engines": {
     "node": ">=18.0.0",
