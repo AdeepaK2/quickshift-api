@@ -1,9 +1,9 @@
 const User = require('../models/user');
 const Employer = require('../models/employer');
 const RefreshToken = require('../models/refreshToken');
+const OTP = require('../models/otp');
 const { generateAccessToken, generateRefreshToken, verifyToken } = require('../config/jwt');
 const emailService = require('../services/emailService');
-const crypto = require('crypto');
 const { v4: uuidv4 } = require('uuid');
 
 /**
@@ -31,21 +31,13 @@ exports.registerUser = async (req, res) => {
       });
     }
     
-    // Create verification token
-    const verificationToken = crypto.randomBytes(32).toString('hex');
-    const verificationExpires = Date.now() + 24 * 60 * 60 * 1000; // 24 hours
-    
-    // Create new user with verification token
+    // Create new user without verification token
     const user = new User({
       ...req.body,
-      verificationToken,
-      verificationExpires
+      isVerified: true // Auto-verify since we removed email verification
     });
     
     await user.save();
-    
-    // Send verification email
-    await emailService.sendVerificationEmail(user, verificationToken, 'user');
     
     // Generate tokens
     const payload = createTokenPayload(user, 'user');
@@ -64,15 +56,13 @@ exports.registerUser = async (req, res) => {
     // Send welcome email
     await emailService.sendWelcomeEmail(user, 'user');
     
-    // Return user data without password and tokens
+    // Return user data without password
     const userResponse = user.toObject();
     delete userResponse.password;
-    delete userResponse.verificationToken;
-    delete userResponse.verificationExpires;
     
     res.status(201).json({
       success: true,
-      message: 'User registered successfully. Please verify your email.',
+      message: 'User registered successfully',
       data: {
         user: userResponse,
         tokens: {
@@ -106,21 +96,13 @@ exports.registerEmployer = async (req, res) => {
       });
     }
     
-    // Create verification token
-    const verificationToken = crypto.randomBytes(32).toString('hex');
-    const verificationExpires = Date.now() + 24 * 60 * 60 * 1000; // 24 hours
-    
-    // Create new employer with verification token
+    // Create new employer without verification token
     const employer = new Employer({
       ...req.body,
-      verificationToken,
-      verificationExpires
+      isVerified: true // Auto-verify since we removed email verification
     });
     
     await employer.save();
-    
-    // Send verification email
-    await emailService.sendVerificationEmail(employer, verificationToken, 'employer');
     
     // Generate tokens
     const payload = createTokenPayload(employer, 'employer');
@@ -139,15 +121,13 @@ exports.registerEmployer = async (req, res) => {
     // Send welcome email
     await emailService.sendWelcomeEmail(employer, 'employer');
     
-    // Return employer data without password and tokens
+    // Return employer data without password
     const employerResponse = employer.toObject();
     delete employerResponse.password;
-    delete employerResponse.verificationToken;
-    delete employerResponse.verificationExpires;
     
     res.status(201).json({
       success: true,
-      message: 'Employer registered successfully. Please verify your email.',
+      message: 'Employer registered successfully',
       data: {
         employer: employerResponse,
         tokens: {
@@ -167,7 +147,7 @@ exports.registerEmployer = async (req, res) => {
 };
 
 /**
- * Login user or employer
+ * Login user, employer, or admin
  * @route POST /api/auth/login
  */
 exports.login = async (req, res) => {
@@ -177,12 +157,21 @@ exports.login = async (req, res) => {
     let user;
     let model;
     
-    // Check if it's an employer or user login
+    // Check if it's an employer, admin, or user login
     if (userType === 'employer') {
       user = await Employer.findOne({ email });
       model = 'Employer';
+    } else if (userType === 'admin') {
+      user = await User.findOne({ 
+        email, 
+        role: { $in: ['admin', 'super_admin'] } 
+      });
+      model = 'User';
     } else {
-      user = await User.findOne({ email });
+      user = await User.findOne({ 
+        email,
+        role: 'job_seeker' 
+      });
       model = 'User';
     }
     
@@ -230,6 +219,7 @@ exports.login = async (req, res) => {
       message: 'Logged in successfully',
       data: {
         user: userResponse,
+        userType: userType || 'user',
         tokens: {
           accessToken,
           refreshToken
@@ -357,60 +347,7 @@ exports.logout = async (req, res) => {
 };
 
 /**
- * Verify email
- * @route GET /api/auth/verify-email/:token
- */
-exports.verifyEmail = async (req, res) => {
-  try {
-    const { token } = req.params;
-    
-    // Try to find user with the token
-    let user = await User.findOne({
-      verificationToken: token,
-      verificationExpires: { $gt: Date.now() }
-    });
-    
-    let userType = 'user';
-    
-    // If not found in users, try employers
-    if (!user) {
-      user = await Employer.findOne({
-        verificationToken: token,
-        verificationExpires: { $gt: Date.now() }
-      });
-      userType = 'employer';
-    }
-    
-    // If still not found or token expired
-    if (!user) {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid or expired verification token'
-      });
-    }
-    
-    // Update user verification status
-    user.isVerified = true;
-    user.verificationToken = undefined;
-    user.verificationExpires = undefined;
-    await user.save();
-    
-    res.status(200).json({
-      success: true,
-      message: 'Email verified successfully'
-    });
-  } catch (error) {
-    console.error('Email verification error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to verify email',
-      error: error.message
-    });
-  }
-};
-
-/**
- * Request password reset
+ * Request password reset OTP
  * @route POST /api/auth/forgot-password
  */
 exports.forgotPassword = async (req, res) => {
@@ -418,37 +355,43 @@ exports.forgotPassword = async (req, res) => {
     const { email, userType } = req.body;
     
     let user;
+    let actualUserType;
     
-    // Check if it's an employer or user
+    // Check if it's an employer, admin, or user
     if (userType === 'employer') {
       user = await Employer.findOne({ email });
+      actualUserType = 'employer';
+    } else if (userType === 'admin') {
+      user = await User.findOne({ 
+        email, 
+        role: { $in: ['admin', 'super_admin'] } 
+      });
+      actualUserType = 'admin';
     } else {
-      user = await User.findOne({ email });
+      user = await User.findOne({ 
+        email,
+        role: 'job_seeker' 
+      });
+      actualUserType = 'user';
     }
     
     // Always return success even if email doesn't exist (security)
     if (!user) {
       return res.status(200).json({
         success: true,
-        message: 'If your email is registered, you will receive a password reset link'
+        message: 'If your email is registered, you will receive an OTP'
       });
     }
     
-    // Generate reset token
-    const resetToken = crypto.randomBytes(32).toString('hex');
-    const resetExpires = Date.now() + 60 * 60 * 1000; // 1 hour
+    // Generate OTP
+    const otpDoc = await OTP.createOTP(email, 'password_reset', actualUserType);
     
-    // Save reset token to user
-    user.resetPasswordToken = resetToken;
-    user.resetPasswordExpires = resetExpires;
-    await user.save();
-    
-    // Send reset email
-    await emailService.sendPasswordResetEmail(user, resetToken, userType);
+    // Send OTP email
+    await emailService.sendPasswordResetOTP(user, otpDoc.otp, actualUserType);
     
     res.status(200).json({
       success: true,
-      message: 'If your email is registered, you will receive a password reset link'
+      message: 'If your email is registered, you will receive an OTP'
     });
   } catch (error) {
     console.error('Forgot password error:', error);
@@ -461,60 +404,280 @@ exports.forgotPassword = async (req, res) => {
 };
 
 /**
- * Reset password
- * @route POST /api/auth/reset-password/:token
+ * Verify OTP
+ * @route POST /api/auth/verify-otp
+ */
+exports.verifyOTP = async (req, res) => {
+  try {
+    const { email, otp, purpose } = req.body;
+    
+    const result = await OTP.verifyOTP(email, otp, purpose);
+    
+    if (!result.success) {
+      return res.status(400).json({
+        success: false,
+        message: result.message
+      });
+    }
+    
+    res.status(200).json({
+      success: true,
+      message: 'OTP verified successfully'
+    });
+  } catch (error) {
+    console.error('OTP verification error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to verify OTP',
+      error: error.message
+    });
+  }
+};
+
+/**
+ * Reset password (requires OTP verification first)
+ * @route POST /api/auth/reset-password
  */
 exports.resetPassword = async (req, res) => {
   try {
-    const { token } = req.params;
-    const { password } = req.body;
+    const { email, otp, password, userType } = req.body;
     
-    // Try to find user with the token
-    let user = await User.findOne({
-      resetPasswordToken: token,
-      resetPasswordExpires: { $gt: Date.now() }
-    });
-    
-    let userType = 'user';
-    
-    // If not found in users, try employers
-    if (!user) {
-      user = await Employer.findOne({
-        resetPasswordToken: token,
-        resetPasswordExpires: { $gt: Date.now() }
+    // Verify OTP first - using the special password reset flow
+    const otpResult = await OTP.verifyOTP(email, otp, 'password_reset');
+    if (!otpResult.success) {
+      // Enhanced error message for better UX
+      const errorMessage = otpResult.message === 'Invalid or expired OTP' 
+        ? 'Your verification code has expired. Please request a new code.'
+        : otpResult.message;
+      
+      return res.status(400).json({
+        success: false,
+        message: errorMessage
       });
-      userType = 'employer';
     }
     
-    // If still not found or token expired
+    let user;
+    let model;
+    
+    // Find user based on type
+    if (userType === 'employer') {
+      user = await Employer.findOne({ email });
+      model = 'Employer';
+    } else if (userType === 'admin') {
+      user = await User.findOne({ 
+        email, 
+        role: { $in: ['admin', 'super_admin'] } 
+      });
+      model = 'User';
+    } else {
+      user = await User.findOne({ 
+        email,
+        role: 'job_seeker' 
+      });
+      model = 'User';
+    }
+    
     if (!user) {
       return res.status(400).json({
         success: false,
-        message: 'Invalid or expired reset token'
+        message: 'User not found'
       });
     }
-    
-    // Update password
+      // Update password
     user.password = password;
-    user.resetPasswordToken = undefined;
-    user.resetPasswordExpires = undefined;
     await user.save();
     
     // Invalidate all refresh tokens for this user
     await RefreshToken.deleteMany({ 
       userId: user._id, 
-      userModel: userType === 'employer' ? 'Employer' : 'User' 
+      userModel: model
     });
+    
+    // Generate new tokens so user remains logged in after password reset
+    const payload = createTokenPayload(user, userType || (model === 'Employer' ? 'employer' : 'user'));
+    const accessToken = generateAccessToken(payload);
+    const refreshToken = generateRefreshToken(payload);
+    
+    // Save new refresh token to database
+    await new RefreshToken({
+      token: refreshToken,
+      userId: user._id,
+      userModel: model,
+      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) // 7 days
+    }).save();
+    
+    // Return user data without password
+    const userResponse = user.toObject();
+    delete userResponse.password;
     
     res.status(200).json({
       success: true,
-      message: 'Password reset successfully'
+      message: 'Password reset successfully',
+      data: {
+        user: userResponse,
+        userType: userType || (model === 'Employer' ? 'employer' : 'user'),
+        tokens: {
+          accessToken,
+          refreshToken
+        }
+      }
     });
   } catch (error) {
     console.error('Reset password error:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to reset password',
+      error: error.message
+    });
+  }
+};
+
+/**
+ * Resend OTP
+ * @route POST /api/auth/resend-otp
+ */
+exports.resendOTP = async (req, res) => {
+  try {
+    const { email, purpose, userType } = req.body;
+    
+    let user;
+    let actualUserType;
+    
+    // Check if it's an employer, admin, or user
+    if (userType === 'employer') {
+      user = await Employer.findOne({ email });
+      actualUserType = 'employer';
+    } else if (userType === 'admin') {
+      user = await User.findOne({ 
+        email, 
+        role: { $in: ['admin', 'super_admin'] } 
+      });
+      actualUserType = 'admin';
+    } else {
+      user = await User.findOne({ 
+        email,
+        role: 'job_seeker' 
+      });
+      actualUserType = 'user';
+    }
+    
+    // Always return success even if email doesn't exist (security)
+    if (!user) {
+      return res.status(200).json({
+        success: true,
+        message: 'If your email is registered, you will receive an OTP'
+      });
+    }
+    
+    // Generate new OTP
+    const otpDoc = await OTP.createOTP(email, purpose, actualUserType);
+    
+    // Send OTP email based on purpose
+    if (purpose === 'password_reset') {
+      await emailService.sendPasswordResetOTP(user, otpDoc.otp, actualUserType);
+    } else if (purpose === 'login_verification') {
+      await emailService.sendLoginOTP(user, otpDoc.otp, actualUserType);
+    }
+    
+    res.status(200).json({
+      success: true,
+      message: 'OTP has been resent to your email'
+    });
+  } catch (error) {
+    console.error('Resend OTP error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to resend OTP',
+      error: error.message
+    });
+  }
+};
+
+/**
+ * Change password for logged-in users
+ * @route POST /api/auth/change-password
+ */
+exports.changePassword = async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+    const user = req.user;
+    
+    // Check if current password is correct
+    const isMatch = await user.comparePassword(currentPassword);
+    if (!isMatch) {
+      return res.status(400).json({
+        success: false,
+        message: 'Current password is incorrect'
+      });
+    }
+    
+    // Update password
+    user.password = newPassword;
+    await user.save();
+    
+    // Invalidate all refresh tokens for this user
+    const userModel = req.userType === 'employer' ? 'Employer' : 'User';
+    await RefreshToken.deleteMany({ 
+      userId: user._id, 
+      userModel: userModel
+    });
+    
+    res.status(200).json({
+      success: true,
+      message: 'Password changed successfully. Please log in again.'
+    });
+  } catch (error) {
+    console.error('Change password error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to change password',
+      error: error.message
+    });
+  }
+};
+
+/**
+ * Update user profile
+ * @route PUT /api/auth/profile
+ */
+exports.updateProfile = async (req, res) => {
+  try {
+    const user = req.user;
+    const updates = req.body;
+    
+    // Remove fields that shouldn't be updated via this endpoint
+    delete updates.password;
+    delete updates.email;
+    delete updates.role;
+    delete updates._id;
+    delete updates.__v;
+    delete updates.createdAt;
+    delete updates.updatedAt;
+    
+    // Update user fields
+    Object.keys(updates).forEach(key => {
+      if (updates[key] !== undefined) {
+        user[key] = updates[key];
+      }
+    });
+    
+    user.updatedAt = Date.now();
+    await user.save();
+    
+    // Return updated user data without password
+    const userResponse = user.toObject();
+    delete userResponse.password;
+    
+    res.status(200).json({
+      success: true,
+      message: 'Profile updated successfully',
+      data: userResponse
+    });
+  } catch (error) {
+    console.error('Update profile error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to update profile',
       error: error.message
     });
   }

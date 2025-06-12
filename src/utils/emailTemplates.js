@@ -1,10 +1,12 @@
 /**
- * Email templates for QuickShift
+ * Email templates for QuickShift - Updated with OTP functionality
  */
 
 const welcomeEmail = (name, userType) => {
   const roleSpecificText = userType === 'employer' 
     ? 'start posting jobs and finding great talent'
+    : userType === 'admin'
+    ? 'manage the platform and oversee operations'
     : 'explore job opportunities that match your skills';
   
   return {
@@ -44,36 +46,38 @@ const welcomeEmail = (name, userType) => {
   };
 };
 
-const verificationEmail = (name, verificationUrl) => {
+const passwordResetOTP = (name, otp) => {
   return {
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
         <div style="background-color: #4a6cf7; padding: 20px; text-align: center;">
-          <h1 style="color: white; margin: 0;">Verify Your Email</h1>
+          <h1 style="color: white; margin: 0;">Password Reset OTP</h1>
         </div>
         <div style="padding: 20px; border: 1px solid #e9e9e9; border-top: none;">
-          <p style="font-size: 16px;">Hello, <strong>${name}</strong>!</p>
-          <p style="font-size: 16px;">Thank you for registering with QuickShift. To complete your registration, please verify your email address by clicking the button below:</p>
-          <div style="text-align: center; margin-top: 30px;">
-            <a href="${verificationUrl}" style="background-color: #4a6cf7; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; font-weight: bold;">Verify Email Address</a>
+          <p style="font-size: 16px;">Hello, <strong>${name}</strong>!</p>          <p style="font-size: 16px;">We received a request to reset your password. If you didn't make this request, you can safely ignore this email.</p>
+          <p style="font-size: 16px;">Your password reset OTP is:</p>
+          <div style="text-align: center; margin: 30px 0;">
+            <div style="background-color: #f8f9fa; border: 2px solid #4a6cf7; border-radius: 8px; padding: 20px; display: inline-block;">
+              <h2 style="color: #4a6cf7; margin: 0; font-size: 32px; font-weight: bold; letter-spacing: 4px;">${otp}</h2>
+            </div>
           </div>
-          <p style="font-size: 16px; margin-top: 20px;">If the button doesn't work, you can also copy and paste the following link into your browser:</p>
-          <p style="font-size: 14px; word-break: break-all; background-color: #f5f5f5; padding: 10px; border-radius: 5px;">${verificationUrl}</p>
-          <p style="font-size: 16px;">This link will expire in 24 hours for security reasons.</p>
+          <p style="font-size: 16px;">This OTP will expire in <strong>20 minutes</strong> for security reasons.</p>
+          <p style="font-size: 16px;">Enter this OTP on the password reset page to continue.</p>
           <p style="font-size: 14px; margin-top: 30px; color: #666;">Best regards,<br>The QuickShift Team</p>
         </div>
       </div>
     `,
     text: `
-      Verify Your Email
+      Password Reset OTP
       
       Hello, ${name}!
       
-      Thank you for registering with QuickShift. To complete your registration, please verify your email address by clicking the link below:
+      We received a request to reset your password. If you didn't make this request, you can safely ignore this email.
       
-      ${verificationUrl}
-      
-      This link will expire in 24 hours for security reasons.
+      Your password reset OTP is: ${otp}
+        This OTP will expire in 20 minutes for security reasons.
+
+      Enter this OTP on the password reset page to continue.
       
       Best regards,
       The QuickShift Team
@@ -81,39 +85,37 @@ const verificationEmail = (name, verificationUrl) => {
   };
 };
 
-const passwordResetEmail = (name, resetUrl) => {
+const loginOTP = (name, otp) => {
   return {
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
         <div style="background-color: #4a6cf7; padding: 20px; text-align: center;">
-          <h1 style="color: white; margin: 0;">Password Reset</h1>
+          <h1 style="color: white; margin: 0;">Login Verification OTP</h1>
         </div>
         <div style="padding: 20px; border: 1px solid #e9e9e9; border-top: none;">
-          <p style="font-size: 16px;">Hello, <strong>${name}</strong>!</p>
-          <p style="font-size: 16px;">We received a request to reset your password. If you didn't make this request, you can safely ignore this email.</p>
-          <p style="font-size: 16px;">To reset your password, click the button below:</p>
-          <div style="text-align: center; margin-top: 30px;">
-            <a href="${resetUrl}" style="background-color: #4a6cf7; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; font-weight: bold;">Reset Password</a>
+          <p style="font-size: 16px;">Hello, <strong>${name}</strong>!</p>          <p style="font-size: 16px;">Someone is trying to access your QuickShift account. If this was you, please use the OTP below:</p>
+          <div style="text-align: center; margin: 30px 0;">
+            <div style="background-color: #f8f9fa; border: 2px solid #4a6cf7; border-radius: 8px; padding: 20px; display: inline-block;">
+              <h2 style="color: #4a6cf7; margin: 0; font-size: 32px; font-weight: bold; letter-spacing: 4px;">${otp}</h2>
+            </div>
           </div>
-          <p style="font-size: 16px; margin-top: 20px;">If the button doesn't work, you can also copy and paste the following link into your browser:</p>
-          <p style="font-size: 14px; word-break: break-all; background-color: #f5f5f5; padding: 10px; border-radius: 5px;">${resetUrl}</p>
-          <p style="font-size: 16px;">This link will expire in 1 hour for security reasons.</p>
+          <p style="font-size: 16px;">This OTP will expire in <strong>20 minutes</strong> for security reasons.</p>
+          <p style="font-size: 16px;">If you didn't try to log in, please secure your account immediately.</p>
           <p style="font-size: 14px; margin-top: 30px; color: #666;">Best regards,<br>The QuickShift Team</p>
         </div>
       </div>
     `,
     text: `
-      Password Reset
+      Login Verification OTP
       
       Hello, ${name}!
       
-      We received a request to reset your password. If you didn't make this request, you can safely ignore this email.
+      Someone is trying to access your QuickShift account. If this was you, please use the OTP below:
+        Your login OTP is: ${otp}
       
-      To reset your password, click the link below:
+      This OTP will expire in 20 minutes for security reasons.
       
-      ${resetUrl}
-      
-      This link will expire in 1 hour for security reasons.
+      If you didn't try to log in, please secure your account immediately.
       
       Best regards,
       The QuickShift Team
@@ -362,8 +364,8 @@ function toRadians(degrees) {
 
 module.exports = {
   welcomeEmail,
-  verificationEmail,
-  passwordResetEmail,
+  passwordResetOTP,
+  loginOTP,
   newJobAlert,
   applicationStatusUpdate,
   jobRecommendations,
