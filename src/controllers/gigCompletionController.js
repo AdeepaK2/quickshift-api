@@ -1108,3 +1108,81 @@ exports.checkWorkerAccountStatus = async (req, res) => {
     });
   }
 };
+
+/**
+ * Get current user's gig completions
+ * GET /api/gig-completions/my-completions
+ */
+exports.getMyCompletions = async (req, res) => {
+  try {
+    const userId = req.user._id;
+    
+    // Build filter object
+    const filter = { user: userId };
+    
+    // Add status filter if provided
+    if (req.query.status) {
+      filter.status = req.query.status;
+    }
+    
+    // Add payment status filter if provided
+    if (req.query.paymentStatus) {
+      filter.paymentStatus = req.query.paymentStatus;
+    }
+    
+    // Add date range filters if provided
+    if (req.query.startDate || req.query.endDate) {
+      filter.completionDate = {};
+      if (req.query.startDate) {
+        filter.completionDate.$gte = new Date(req.query.startDate);
+      }
+      if (req.query.endDate) {
+        filter.completionDate.$lte = new Date(req.query.endDate);
+      }
+    }
+    
+    // Pagination
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const skip = (page - 1) * limit;
+    
+    // Sorting
+    const sortBy = req.query.sortBy || 'completionDate';
+    const sortOrder = req.query.sortOrder === 'asc' ? 1 : -1;
+    const sort = { [sortBy]: sortOrder };
+    
+    // Get completions with populated data
+    const completions = await GigCompletion.find(filter)
+      .populate({
+        path: 'gigRequest',
+        select: 'title employer payRate',
+        populate: {
+          path: 'employer',
+          select: 'companyName logo'
+        }
+      })
+      .sort(sort)
+      .skip(skip)
+      .limit(limit);
+    
+    const total = await GigCompletion.countDocuments(filter);
+    
+    res.status(200).json({
+      success: true,
+      count: completions.length,
+      total,
+      page,
+      pages: Math.ceil(total / limit),
+      data: {
+        completions
+      }
+    });
+  } catch (error) {
+    console.error('Error getting user completions:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to get user completions',
+      error: error.message
+    });
+  }
+};

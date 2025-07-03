@@ -578,3 +578,70 @@ exports.instantApplyForGig = async (req, res) => {
     });
   }
 };
+
+/**
+ * Get current user's applications
+ * GET /api/gig-applications/my-applications
+ */
+exports.getMyApplications = async (req, res) => {
+  try {
+    const userId = req.user._id;
+    
+    // Build filter object
+    const filter = { user: userId };
+    
+    // Add status filter if provided
+    if (req.query.status) {
+      filter.status = req.query.status;
+    }
+    
+    // Add archived filter if provided
+    if (req.query.isArchived !== undefined) {
+      filter.isArchived = req.query.isArchived === 'true';
+    }
+    
+    // Pagination
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const skip = (page - 1) * limit;
+    
+    // Sorting
+    const sortBy = req.query.sortBy || 'appliedAt';
+    const sortOrder = req.query.sortOrder === 'asc' ? 1 : -1;
+    const sort = { [sortBy]: sortOrder };
+    
+    // Get applications with populated data
+    const applications = await GigApply.find(filter)
+      .populate({
+        path: 'gigRequest',
+        select: 'title employer payRate location',
+        populate: {
+          path: 'employer',
+          select: 'companyName logo'
+        }
+      })
+      .sort(sort)
+      .skip(skip)
+      .limit(limit);
+    
+    const total = await GigApply.countDocuments(filter);
+    
+    res.status(200).json({
+      success: true,
+      count: applications.length,
+      total,
+      page,
+      pages: Math.ceil(total / limit),
+      data: {
+        applications
+      }
+    });
+  } catch (error) {
+    console.error('Error getting user applications:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to get user applications',
+      error: error.message
+    });
+  }
+};

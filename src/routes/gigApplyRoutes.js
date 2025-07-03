@@ -1,6 +1,11 @@
 const express = require('express');
 const router = express.Router();
 const gigApplyController = require('../controllers/gigApplyController');
+const { protect } = require('../middleware/auth');
+
+// Protected routes for authenticated users
+// Get current user's applications
+router.get('/my-applications', protect, gigApplyController.getMyApplications);
 
 // Apply for a gig
 router.post('/', gigApplyController.applyForGig);

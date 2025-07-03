@@ -33,8 +33,22 @@ app.use('/api/webhooks', webhookRoutes);
 // Middleware
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-app.use(cors());
-app.use(helmet());
+
+// Configure CORS with proper options
+const corsOptions = {
+  origin: ['http://localhost:3000', 'http://127.0.0.1:3000', process.env.FRONTEND_URL, 'http://localhost:5000'].filter(Boolean),
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Cache-Control', 'Pragma', 'Expires']
+};
+app.use(cors(corsOptions));
+
+// Configure helmet with less restrictive settings for development
+app.use(helmet({
+  contentSecurityPolicy: process.env.NODE_ENV === 'production' ? undefined : false,
+  crossOriginEmbedderPolicy: process.env.NODE_ENV === 'production' ? undefined : false,
+  crossOriginResourcePolicy: { policy: 'cross-origin' }
+}));
 app.use(morgan('dev'));
 
 // Default route

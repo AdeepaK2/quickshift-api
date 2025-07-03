@@ -43,6 +43,13 @@ const adminSchema = new mongoose.Schema({
   lastLoginAt: {
     type: Date
   },
+  twoFactorAuth: {
+    type: Boolean,
+    default: false
+  },
+  twoFactorSecret: {
+    type: String
+  },
   permissions: {
     canCreateAdmin: {
       type: Boolean,
@@ -131,7 +138,7 @@ adminSchema.pre('save', function(next) {
         canManageEmployers: true,
         canManageGigs: true,
         canAccessFinancials: false,
-        canManageSettings: false
+        canManageSettings: true  // Grant platform settings access to all admins
       };
     }
   }

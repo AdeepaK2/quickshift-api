@@ -150,7 +150,7 @@ exports.getJobRecommendations = async (req, res) => {
     
     // Build query for job recommendations based on user preferences
     const query = {
-      status: 'open',
+      status: 'active',
       filledPositions: { $lt: { $add: ['$totalPositions'] } }
     };
     
@@ -234,7 +234,7 @@ exports.sendJobRecommendations = async (req, res) => {
     
     // Get recommendations using the same logic as getJobRecommendations
     const query = {
-      status: 'open',
+      status: 'active',
       filledPositions: { $lt: { $add: ['$totalPositions'] } }
     };
     
