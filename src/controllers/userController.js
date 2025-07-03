@@ -169,3 +169,117 @@ exports.deleteUser = async (req, res) => {
     });
   }
 };
+
+// Get user stats for dashboard
+exports.getUserStats = async (req, res) => {
+  try {
+    const userId = req.user._id;
+    
+    // Get user's gig applications
+    const GigApply = require('../models/gigApply');
+    const GigCompletion = require('../models/gigCompletion');
+    const Rating = require('../models/rating');
+    
+    const appliedJobs = await GigApply.countDocuments({ user: userId });
+    const activeGigs = await GigCompletion.countDocuments({ 
+      user: userId, 
+      status: { $in: ['confirmed', 'in_progress'] }
+    });
+    const completedGigs = await GigCompletion.countDocuments({ 
+      user: userId, 
+      status: 'completed' 
+    });
+    
+    // Calculate total earnings from completed gigs
+    const completedGigsData = await GigCompletion.find({ 
+      user: userId, 
+      status: 'completed' 
+    }).populate('gigRequest', 'payRate');
+    
+    const totalEarnings = completedGigsData.reduce((sum, gig) => {
+      return sum + (gig.gigRequest?.payRate?.amount || 0);
+    }, 0);
+    
+    // Calculate monthly earnings (current month)
+    const currentDate = new Date();
+    const startOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
+    const monthlyCompletedGigs = await GigCompletion.find({ 
+      user: userId, 
+      status: 'completed',
+      completionDate: { $gte: startOfMonth }
+    }).populate('gigRequest', 'payRate');
+    
+    const monthlyEarnings = monthlyCompletedGigs.reduce((sum, gig) => {
+      return sum + (gig.gigRequest?.payRate?.amount || 0);
+    }, 0);
+    
+    // Get user's average rating
+    const userRatings = await Rating.find({ ratedUser: userId });
+    const avgRating = userRatings.length > 0 
+      ? userRatings.reduce((sum, rating) => sum + rating.rating, 0) / userRatings.length 
+      : 0;
+    
+    // Count pending payments (completed but not yet paid)
+    const pendingPayments = await GigCompletion.countDocuments({
+      user: userId,
+      status: 'completed',
+      paymentStatus: { $ne: 'paid' }
+    });
+    
+    res.status(200).json({
+      success: true,
+      data: {
+        appliedJobs,
+        activeGigs,
+        completedGigs,
+        totalEarnings,
+        monthlyEarnings,
+        rating: Math.round(avgRating * 10) / 10, // Round to 1 decimal place
+        pendingPayments
+      }
+    });
+  } catch (error) {
+    console.error('Error getting user stats:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to get user stats',
+      error: error.message
+    });
+  }
+};
+
+// Upload profile picture
+exports.uploadProfilePicture = async (req, res) => {
+  try {
+    // This is a placeholder - in production you'd use multer and cloud storage
+    res.status(501).json({
+      success: false,
+      message: 'Profile picture upload not implemented yet. Please use a third-party service or implement multer with cloud storage.'
+    });
+  } catch (error) {
+    console.error('Error uploading profile picture:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to upload profile picture',
+      error: error.message
+    });
+  }
+};
+
+// Upload documents
+exports.uploadDocument = async (req, res) => {
+  try {
+    // This is a placeholder - in production you'd use multer and cloud storage
+    res.status(501).json({
+      success: false,
+      message: 'Document upload not implemented yet. Please use a third-party service or implement multer with cloud storage.'
+    });
+  } catch (error) {
+    console.error('Error uploading document:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to upload document',
+      error: error.message
+    });
+  }
+};

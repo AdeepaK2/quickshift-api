@@ -3,6 +3,7 @@ const Admin = require('../models/admin');
 const Employer = require('../models/employer');
 const GigRequest = require('../models/gigRequest');
 const GigCompletion = require('../models/gigCompletion');
+const PlatformSettings = require('../models/platformSettings');
 const bcrypt = require('bcrypt');
 
 // Create admin user
@@ -33,6 +34,15 @@ exports.createAdmin = async (req, res) => {
       return res.status(400).json({
         success: false,
         message: 'Invalid admin role'
+      });
+    }
+
+    // Only super_admin or admin with canCreateAdmin permission can create admins
+    if (req.user.role !== 'super_admin' && 
+        (!req.user.permissions || !req.user.permissions.canCreateAdmin)) {
+      return res.status(403).json({
+        success: false,
+        message: 'You do not have permission to create admin accounts'
       });
     }
 
@@ -320,6 +330,7 @@ exports.deleteAdmin = async (req, res) => {
 // Admin Dashboard - Get statistics
 exports.getDashboardStats = async (req, res) => {
   try {
+    // Get counts using Promise.all for efficiency
     const [
       totalUsers,
       totalEmployers,
@@ -357,6 +368,34 @@ exports.getDashboardStats = async (req, res) => {
       })
     ]);
 
+    // Get top rated students
+    const topStudents = await User.aggregate([
+      { $match: { role: 'job_seeker' } },
+      { $sort: { 'ratings.averageRating': -1 } },
+      { $limit: 5 },
+      { $project: { 
+        _id: 1, 
+        firstName: 1, 
+        lastName: 1,
+        email: 1,
+        university: 1,
+        ratings: 1
+      }}
+    ]);
+
+    // Get top rated employers
+    const topEmployers = await Employer.aggregate([
+      { $sort: { 'ratings.averageRating': -1 } },
+      { $limit: 5 },
+      { $project: { 
+        _id: 1, 
+        companyName: 1,
+        email: 1,
+        location: 1,
+        ratings: 1
+      }}
+    ]);
+    
     res.status(200).json({
       success: true,
       data: {
@@ -373,6 +412,8 @@ exports.getDashboardStats = async (req, res) => {
           newEmployersLastMonth,
           newGigsLastMonth
         },
+        topStudents,
+        topEmployers,
         generatedAt: new Date()
       }
     });
@@ -473,6 +514,176 @@ exports.getAllEmployersForAdmin = async (req, res) => {
       success: false,
       message: 'Failed to retrieve employers',
       error: error.message
+    });
+  }
+};
+
+// Platform Settings Controllers
+
+// Get platform settings
+exports.getPlatformSettings = async (req, res) => {
+  try {
+    // All admins can access platform settings
+    // No permission check required
+
+    // Get settings or create with defaults if they don't exist
+    let settings = await PlatformSettings.findOne();
+    
+    if (!settings) {
+      settings = await PlatformSettings.create({
+        maintenanceMode: false,
+        feedbackCollection: true,
+        emailNotifications: true,
+        allowRegistrations: true,
+        passwordMinLength: 8,
+        sessionTimeout: 30
+      });
+    }
+    
+    res.status(200).json({
+      success: true,
+      message: 'Platform settings retrieved successfully',
+      data: settings
+    });
+  } catch (error) {
+    console.error('Error retrieving platform settings:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to retrieve platform settings',
+      error: error.message
+    });
+  }
+};
+
+// Update platform settings
+exports.updatePlatformSettings = async (req, res) => {
+  try {
+    // Only admins with canManageSettings permission should be able to update platform settings
+    if (req.user.role !== 'super_admin' && 
+        (!req.user.permissions || !req.user.permissions.canManageSettings)) {
+      return res.status(403).json({
+        success: false,
+        message: 'You do not have permission to update platform settings'
+      });
+    }
+
+    const {
+      maintenanceMode,
+      feedbackCollection,
+      emailNotifications,
+      allowRegistrations,
+      passwordMinLength,
+      sessionTimeout
+    } = req.body;
+
+    // Update settings or create with defaults if they don't exist
+    let settings = await PlatformSettings.findOne();
+    
+    if (!settings) {
+      settings = await PlatformSettings.create({
+        maintenanceMode: maintenanceMode !== undefined ? maintenanceMode : false,
+        feedbackCollection: feedbackCollection !== undefined ? feedbackCollection : true,
+        emailNotifications: emailNotifications !== undefined ? emailNotifications : true,
+        allowRegistrations: allowRegistrations !== undefined ? allowRegistrations : true,
+        passwordMinLength: passwordMinLength !== undefined ? passwordMinLength : 8,
+        sessionTimeout: sessionTimeout !== undefined ? sessionTimeout : 30
+      });
+    } else {
+      // Only update fields that were provided
+      if (maintenanceMode !== undefined) settings.maintenanceMode = maintenanceMode;
+      if (feedbackCollection !== undefined) settings.feedbackCollection = feedbackCollection;
+      if (emailNotifications !== undefined) settings.emailNotifications = emailNotifications;
+      if (allowRegistrations !== undefined) settings.allowRegistrations = allowRegistrations;
+      if (passwordMinLength !== undefined) settings.passwordMinLength = passwordMinLength;
+      if (sessionTimeout !== undefined) settings.sessionTimeout = sessionTimeout;
+      
+      await settings.save();
+    }
+    
+    res.status(200).json({
+      success: true,
+      message: 'Platform settings updated successfully',
+      data: settings
+    });
+  } catch (error) {
+    console.error('Error updating platform settings:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to update platform settings',
+      error: error.message
+    });
+  }
+};
+
+// Toggle two-factor authentication for an admin
+exports.toggleTwoFactorAuth = async (req, res) => {
+  try {
+    const { twoFactorAuth } = req.body;
+    const adminId = req.params.id;
+    
+    // Admins should only be able to toggle their own 2FA unless they're super_admin
+    if (adminId !== req.user._id.toString() && req.user.role !== 'super_admin') {
+      return res.status(403).json({
+        success: false,
+        message: 'You do not have permission to change 2FA settings for other admins'
+      });
+    }
+    
+    const admin = await Admin.findById(adminId);
+    
+    if (!admin) {
+      return res.status(404).json({
+        success: false,
+        message: 'Admin not found'
+      });
+    }
+    
+    // Update the 2FA setting
+    admin.twoFactorAuth = !!twoFactorAuth;
+    await admin.save();
+    
+    res.status(200).json({
+      success: true,
+      message: 'Two-factor authentication setting updated',
+      data: {
+        twoFactorAuth: admin.twoFactorAuth
+      }
+    });
+  } catch (error) {
+    console.error('Error toggling two-factor auth:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to update two-factor authentication setting',
+      error: error.message
+    });
+  }
+};
+
+// Get current admin profile (from authenticated user)
+exports.getCurrentAdminProfile = async (req, res) => {
+  try {
+    // The user is already authenticated via the protect middleware
+    // and the user object is available as req.user
+    const adminId = req.user._id;
+    
+    const admin = await Admin.findById(adminId).select('-password');
+    
+    if (!admin) {
+      return res.status(404).json({
+        success: false,
+        message: 'Admin profile not found'
+      });
+    }
+    
+    res.status(200).json({
+      success: true,
+      data: admin
+    });
+  } catch (error) {
+    console.error('Error getting current admin profile:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while retrieving admin profile'
     });
   }
 };

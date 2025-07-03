@@ -4,13 +4,83 @@ const notificationService = require('../services/notificationService');
 const mongoose = require('mongoose');
 
 /**
+ * Update only the status of a gig request
+ * PATCH /api/gig-requests/:id/status
+ */
+exports.updateGigRequestStatus = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status } = req.body;
+    
+    // Validate ObjectId
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid gig request ID'
+      });
+    }
+
+    // Validate status value
+    const validStatuses = ['draft', 'active', 'closed', 'completed', 'cancelled'];
+    if (!status || !validStatuses.includes(status)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid status value. Must be one of: draft, active, closed, completed, cancelled'
+      });
+    }
+
+    // Find the gig request
+    let gigRequest = await GigRequest.findById(id);
+    
+    if (!gigRequest) {
+      return res.status(404).json({
+        success: false,
+        message: 'Gig request not found'
+      });
+    }
+
+    // Check if the user is authorized to update this gig request
+    // Admins can update any gig request, employers can only update their own
+    if (req.userType === 'employer' && gigRequest.employer.toString() !== req.user._id.toString()) {
+      return res.status(403).json({
+        success: false,
+        message: 'Not authorized to update this gig request'
+      });
+    }
+
+    // Update only the status
+    gigRequest = await GigRequest.findByIdAndUpdate(
+      id,
+      { status, updatedAt: Date.now() },
+      { new: true, runValidators: true }
+    ).populate('employer', 'companyName email contactNumber');
+    
+    res.status(200).json({
+      success: true,
+      message: 'Gig request status updated successfully',
+      data: gigRequest
+    });
+  } catch (error) {
+    console.error('Error updating gig request status:', error);
+    res.status(400).json({
+      success: false,
+      message: 'Failed to update gig request status',
+      error: error.message
+    });
+  }
+};
+
+/**
  * Create a new gig request
  * POST /api/gig-requests
  */
 exports.createGigRequest = async (req, res) => {
   try {
+    // Get employer ID from authenticated user
+    const employerId = req.user._id;
+    
     // Check if employer exists
-    const employer = await Employer.findById(req.body.employer);
+    const employer = await Employer.findById(employerId);
     if (!employer) {
       return res.status(404).json({
         success: false,
@@ -18,7 +88,13 @@ exports.createGigRequest = async (req, res) => {
       });
     }
 
-    const gigRequest = new GigRequest(req.body);
+    // Add employer ID to request body
+    const gigRequestData = {
+      ...req.body,
+      employer: employerId
+    };
+
+    const gigRequest = new GigRequest(gigRequestData);
     await gigRequest.save();
     
     // Populate employer details for notification
@@ -111,11 +187,25 @@ exports.getAllGigRequests = async (req, res) => {
     // Build filter object
     const filter = {};
     
+    // Check if this is a public route (for job seekers) or authenticated route (for employers)
+    const isPublicRoute = req.route.path === '/public';
+    
+    // If user is authenticated AND this is not a public route, filter by their employer ID
+    if (req.user && req.user._id && !isPublicRoute) {
+      filter.employer = req.user._id;
+    }
+    
+    // For public routes, only show active jobs
+    if (isPublicRoute) {
+      filter.status = 'active';
+    }
+    
     // Basic filtering
     if (req.query.category) filter.category = req.query.category;
     if (req.query.status) filter.status = req.query.status;
     if (req.query.city) filter['location.city'] = { $regex: req.query.city, $options: 'i' };
-    if (req.query.employer) filter.employer = new mongoose.Types.ObjectId(req.query.employer);
+    // Only allow explicit employer filter if no user is authenticated (for admin purposes)
+    if (req.query.employer && !req.user) filter.employer = new mongoose.Types.ObjectId(req.query.employer);
     
     // Pay range filtering
     if (req.query.minPay || req.query.maxPay) {
@@ -254,7 +344,12 @@ exports.getAllGigRequests = async (req, res) => {
         total,
         page,
         pages: Math.ceil(total / limit),
-        data: gigRequests
+        data: {
+          gigRequests,
+          total,
+          page,
+          pages: Math.ceil(total / limit)
+        }
       });
     }
     
@@ -273,7 +368,12 @@ exports.getAllGigRequests = async (req, res) => {
       total,
       page,
       pages: Math.ceil(total / limit),
-      data: gigRequests
+      data: {
+        gigRequests,
+        total,
+        page,
+        pages: Math.ceil(total / limit)
+      }
     });
   } catch (error) {
     console.error('Error getting gig requests:', error);
@@ -577,7 +677,7 @@ exports.getInstantApplyEligibleJobs = async (req, res) => {
 
     // Base filter for instant apply eligible jobs
     const filter = {
-      status: 'open',
+      status: 'active',
       filledPositions: { $lt: '$totalPositions' }
     };
 

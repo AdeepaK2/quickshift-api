@@ -33,6 +33,23 @@ const employerSchema = new mongoose.Schema({
     type: String,
     trim: true
   },
+  industryType: {
+    type: String,
+    trim: true
+  },
+  companySize: {
+    type: String,
+    enum: ['1-10', '10-50', '50-100', '100+'],
+    trim: true
+  },
+  website: {
+    type: String,
+    trim: true
+  },
+  contactPersonName: {
+    type: String,
+    trim: true
+  },
   // Authentication and verification
   verificationToken: String,
   verificationExpires: Date,
@@ -41,7 +58,10 @@ const employerSchema = new mongoose.Schema({
   verified: {
     type: Boolean,
     default: false
-  },  ratings: {
+  },
+  isActive: {
+    type: Boolean,
+    default: true
   },
   isVerified: {
     type: Boolean,

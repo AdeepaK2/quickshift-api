@@ -1,6 +1,11 @@
 const express = require('express');
 const gigCompletionController = require('../controllers/gigCompletionController');
+const { protect } = require('../middleware/auth');
 const router = express.Router();
+
+// Protected routes for authenticated users
+// Get current user's gig completions
+router.get('/my-completions', protect, gigCompletionController.getMyCompletions);
 
 // Initialize a gig completion record
 router.post('/initialize', gigCompletionController.initializeGigCompletion);
