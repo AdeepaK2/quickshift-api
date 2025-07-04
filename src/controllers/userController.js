@@ -283,3 +283,97 @@ exports.uploadDocument = async (req, res) => {
     });
   }
 };
+
+// Activate user (admin only)
+exports.activateUser = async (req, res) => {
+  try {
+    const userId = req.params.id;
+    const { reason, notifyUser } = req.body;
+
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    if (user.isActive) {
+      return res.status(400).json({
+        success: false,
+        message: 'User is already active'
+      });
+    }
+
+    // Update user status
+    user.isActive = true;
+    user.updatedAt = new Date();
+    await user.save();
+
+    console.log(`User ${user.email} activated by admin. Reason: ${reason || 'No reason provided'}`);
+
+    res.status(200).json({
+      success: true,
+      message: 'User activated successfully',
+      data: {
+        userId: user._id,
+        email: user.email,
+        isActive: user.isActive
+      }
+    });
+  } catch (error) {
+    console.error('Error activating user:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to activate user',
+      error: error.message
+    });
+  }
+};
+
+// Deactivate user (admin only)
+exports.deactivateUser = async (req, res) => {
+  try {
+    const userId = req.params.id;
+    const { reason, notifyUser } = req.body;
+
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    if (!user.isActive) {
+      return res.status(400).json({
+        success: false,
+        message: 'User is already inactive'
+      });
+    }
+
+    // Update user status
+    user.isActive = false;
+    user.updatedAt = new Date();
+    await user.save();
+
+    console.log(`User ${user.email} deactivated by admin. Reason: ${reason || 'No reason provided'}`);
+
+    res.status(200).json({
+      success: true,
+      message: 'User deactivated successfully',
+      data: {
+        userId: user._id,
+        email: user.email,
+        isActive: user.isActive
+      }
+    });
+  } catch (error) {
+    console.error('Error deactivating user:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to deactivate user',
+      error: error.message
+    });
+  }
+};

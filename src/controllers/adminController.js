@@ -518,6 +518,100 @@ exports.getAllEmployersForAdmin = async (req, res) => {
   }
 };
 
+// Get all gigs (for admin management)
+exports.getAllGigsForAdmin = async (req, res) => {
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const skip = (page - 1) * limit;
+
+    const filter = {};
+    
+    // Add filters
+    if (req.query.status && req.query.status !== 'all') {
+      filter.status = req.query.status;
+    }
+    if (req.query.category && req.query.category !== 'all') {
+      filter.category = req.query.category;
+    }
+    if (req.query.search) {
+      filter.$or = [
+        { title: { $regex: req.query.search, $options: 'i' } },
+        { description: { $regex: req.query.search, $options: 'i' } }
+      ];
+    }
+
+    // Build sort criteria
+    const sortBy = req.query.sortBy || 'createdAt';
+    const sortOrder = req.query.sortOrder === 'asc' ? 1 : -1;
+    const sortCriteria = { [sortBy]: sortOrder };
+
+    // Aggregation pipeline to include employer info and application count
+    const aggregationPipeline = [
+      { $match: filter },
+      {
+        $lookup: {
+          from: 'gigapplies',
+          localField: '_id',
+          foreignField: 'gigRequest',
+          as: 'applications'
+        }
+      },
+      {
+        $addFields: {
+          applicationsCount: { $size: '$applications' }
+        }
+      },
+      {
+        $lookup: {
+          from: 'employers',
+          localField: 'employer',
+          foreignField: '_id',
+          as: 'employer',
+          pipeline: [
+            {
+              $project: {
+                companyName: 1,
+                email: 1,
+                contactNumber: 1,
+                logo: 1
+              }
+            }
+          ]
+        }
+      },
+      { $unwind: '$employer' },
+      { $sort: sortCriteria },
+      { $skip: skip },
+      { $limit: limit },
+      {
+        $project: {
+          applications: 0 // Remove the applications array from the response to keep it clean
+        }
+      }
+    ];
+
+    const gigs = await GigRequest.aggregate(aggregationPipeline);
+    const total = await GigRequest.countDocuments(filter);
+
+    res.status(200).json({
+      success: true,
+      count: gigs.length,
+      total,
+      page,
+      pages: Math.ceil(total / limit),
+      data: gigs
+    });
+  } catch (error) {
+    console.error('Error getting gigs for admin:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to retrieve gigs',
+      error: error.message
+    });
+  }
+};
+
 // Platform Settings Controllers
 
 // Get platform settings
@@ -684,6 +778,111 @@ exports.getCurrentAdminProfile = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Server error while retrieving admin profile'
+    });
+  }
+};
+
+// Activate employer account
+exports.activateEmployer = async (req, res) => {
+  try {
+    const employerId = req.params.id;
+    const { reason, notifyEmployer } = req.body;
+    
+    // Find the employer
+    const employer = await Employer.findById(employerId);
+    if (!employer) {
+      return res.status(404).json({
+        success: false,
+        message: 'Employer not found'
+      });
+    }
+    
+    // Check if already active
+    if (employer.isActive) {
+      return res.status(400).json({
+        success: false,
+        message: 'Employer account is already active'
+      });
+    }
+    
+    // Update employer status
+    employer.isActive = true;
+    employer.activatedAt = new Date();
+    employer.activatedBy = req.user._id;
+    
+    await employer.save();
+    
+    // Log the activation (you can extend this to create an audit log)
+    console.log(`Employer ${employer.companyName} (${employer.email}) activated by admin ${req.user.email}. Reason: ${reason || 'No reason provided'}`);
+    
+    res.status(200).json({
+      success: true,
+      message: 'Employer account activated successfully',
+      data: {
+        employerId: employer._id,
+        companyName: employer.companyName,
+        isActive: employer.isActive
+      }
+    });
+  } catch (error) {
+    console.error('Error activating employer:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to activate employer account',
+      error: error.message
+    });
+  }
+};
+
+// Deactivate employer account
+exports.deactivateEmployer = async (req, res) => {
+  try {
+    const employerId = req.params.id;
+    const { reason, notifyEmployer } = req.body;
+    
+    // Find the employer
+    const employer = await Employer.findById(employerId);
+    if (!employer) {
+      return res.status(404).json({
+        success: false,
+        message: 'Employer not found'
+      });
+    }
+    
+    // Check if already inactive
+    if (!employer.isActive) {
+      return res.status(400).json({
+        success: false,
+        message: 'Employer account is already inactive'
+      });
+    }
+    
+    // Update employer status
+    employer.isActive = false;
+    employer.deactivatedAt = new Date();
+    employer.deactivatedBy = req.user._id;
+    employer.deactivationReason = reason;
+    
+    await employer.save();
+    
+    // Log the deactivation (you can extend this to create an audit log)
+    console.log(`Employer ${employer.companyName} (${employer.email}) deactivated by admin ${req.user.email}. Reason: ${reason || 'No reason provided'}`);
+    
+    res.status(200).json({
+      success: true,
+      message: 'Employer account deactivated successfully',
+      data: {
+        employerId: employer._id,
+        companyName: employer.companyName,
+        isActive: employer.isActive
+      }
+    });
+  } catch (error) {
+    console.error('Error deactivating employer:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to deactivate employer account',
+      error: error.message
     });
   }
 };
