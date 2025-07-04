@@ -36,7 +36,18 @@ app.use(express.urlencoded({ extended: true }));
 
 // Configure CORS with proper options
 const corsOptions = {
-  origin: ['http://localhost:3000', 'http://127.0.0.1:3000', process.env.FRONTEND_URL, 'http://localhost:5000'].filter(Boolean),
+  origin: [
+    'http://localhost:3000', 
+    'http://127.0.0.1:3000', 
+    process.env.FRONTEND_URL,
+    'http://localhost:5000',
+    // Add Vercel deployment patterns
+    /^https:\/\/.*\.vercel\.app$/,
+    // Add your specific Vercel URL if known
+    'https://quickshift-frontend.vercel.app',
+    // Allow any subdomain of vercel.app for development
+    /^https:\/\/quickshift-.*\.vercel\.app$/
+  ].filter(Boolean),
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Cache-Control', 'Pragma', 'Expires']
