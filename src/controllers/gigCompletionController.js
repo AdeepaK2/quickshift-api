@@ -401,7 +401,7 @@ exports.completeGig = async (req, res) => {
     }
 
     // Find the completion record
-    const gigCompletion = await GigCompletion.findById(id);
+    const gigCompletion = await GigCompletion.findById(id).populate('gigRequest');
     if (!gigCompletion) {
       return res.status(404).json({
         success: false,
@@ -420,6 +420,35 @@ exports.completeGig = async (req, res) => {
     } else {
       gigCompletion.status = 'completed';
     }
+
+    // Recalculate all worker payments before marking as completed
+    gigCompletion.workers.forEach(worker => {
+      // Ensure the worker has proper payment calculation details
+      if (!worker.payment.calculationDetails.baseRate && gigCompletion.gigRequest.payRate) {
+        worker.payment.calculationDetails.baseRate = gigCompletion.gigRequest.payRate.amount;
+        worker.payment.calculationDetails.rateType = gigCompletion.gigRequest.payRate.rateType;
+        worker.payment.calculationDetails.overtimeRate = gigCompletion.gigRequest.payRate.amount * 1.5;
+      }
+      
+      // If worker has no completed time slots, use default hours based on original job posting
+      if (!worker.completedTimeSlots || worker.completedTimeSlots.length === 0) {
+        const baseRate = worker.payment.calculationDetails.baseRate;
+        const rateType = worker.payment.calculationDetails.rateType;
+        
+        if (rateType === 'fixed') {
+          worker.payment.amount = baseRate;
+        } else if (rateType === 'hourly') {
+          // Default to 8 hours if no time slots are specified
+          worker.payment.amount = baseRate * 8;
+          worker.payment.calculationDetails.totalHours = 8;
+        } else if (rateType === 'daily') {
+          worker.payment.amount = baseRate;
+        }
+      } else {
+        // Calculate based on actual time slots
+        gigCompletion.calculateWorkerPayment(worker.worker);
+      }
+    });
 
     // Update completion details
     gigCompletion.completedAt = new Date();
@@ -447,7 +476,8 @@ exports.completeGig = async (req, res) => {
       message: 'Gig marked as completed successfully',
       data: {
         status: gigCompletion.status,
-        completedAt: gigCompletion.completedAt
+        completedAt: gigCompletion.completedAt,
+        paymentSummary: gigCompletion.paymentSummary
       }
     });
   } catch (error) {
@@ -1117,27 +1147,25 @@ exports.getMyCompletions = async (req, res) => {
   try {
     const userId = req.user._id;
     
-    // Build filter object
-    const filter = { user: userId };
-    
-    // Add status filter if provided
-    if (req.query.status) {
-      filter.status = req.query.status;
-    }
+    // Build filter object - students are in the workers array
+    const filter = { 
+      'workers.worker': userId,
+      status: { $in: ['completed', 'verified'] }
+    };
     
     // Add payment status filter if provided
     if (req.query.paymentStatus) {
-      filter.paymentStatus = req.query.paymentStatus;
+      filter['workers.payment.status'] = req.query.paymentStatus;
     }
     
     // Add date range filters if provided
     if (req.query.startDate || req.query.endDate) {
-      filter.completionDate = {};
+      filter.completedAt = {};
       if (req.query.startDate) {
-        filter.completionDate.$gte = new Date(req.query.startDate);
+        filter.completedAt.$gte = new Date(req.query.startDate);
       }
       if (req.query.endDate) {
-        filter.completionDate.$lte = new Date(req.query.endDate);
+        filter.completedAt.$lte = new Date(req.query.endDate);
       }
     }
     
@@ -1147,7 +1175,7 @@ exports.getMyCompletions = async (req, res) => {
     const skip = (page - 1) * limit;
     
     // Sorting
-    const sortBy = req.query.sortBy || 'completionDate';
+    const sortBy = req.query.sortBy || 'completedAt';
     const sortOrder = req.query.sortOrder === 'asc' ? 1 : -1;
     const sort = { [sortBy]: sortOrder };
     
@@ -1155,11 +1183,106 @@ exports.getMyCompletions = async (req, res) => {
     const completions = await GigCompletion.find(filter)
       .populate({
         path: 'gigRequest',
-        select: 'title employer payRate',
-        populate: {
-          path: 'employer',
-          select: 'companyName logo'
-        }
+        select: 'title category location payRate totalPositions filledPositions createdAt'
+      })
+      .populate({
+        path: 'employer',
+        select: 'companyName logo'
+      })
+      .sort(sort)
+      .skip(skip)
+      .limit(limit);
+    
+    // Filter and format the data to only include the current user's work
+    const formattedCompletions = completions.map(completion => {
+      const userWorker = completion.workers.find(w => w.worker.toString() === userId.toString());
+      
+      return {
+        _id: completion._id,
+        gigRequest: completion.gigRequest,
+        employer: completion.employer,
+        status: completion.status,
+        completedAt: completion.completedAt,
+        myWork: userWorker ? {
+          payment: userWorker.payment,
+          completedTimeSlots: userWorker.completedTimeSlots,
+          totalHours: userWorker.completedTimeSlots.reduce((total, slot) => total + slot.hoursWorked, 0),
+          performance: userWorker.performance
+        } : null
+      };
+    });
+    
+    const total = await GigCompletion.countDocuments(filter);
+    
+    res.status(200).json({
+      success: true,
+      count: formattedCompletions.length,
+      total,
+      page,
+      pages: Math.ceil(total / limit),
+      data: {
+        completions: formattedCompletions
+      }
+    });
+  } catch (error) {
+    console.error('Error getting user completions:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to get user completions',
+      error: error.message
+    });
+  }
+};
+
+/**
+ * Get completed gigs for employer
+ * GET /api/gig-completions/employer/completed
+ */
+exports.getEmployerCompletedGigs = async (req, res) => {
+  try {
+    const employerId = req.user._id;
+    
+    // Build filter object for employer's completed gigs
+    const filter = { 
+      employer: employerId,
+      status: { $in: ['completed', 'verified'] }
+    };
+    
+    // Add payment status filter if provided
+    if (req.query.paymentStatus) {
+      filter['paymentSummary.paymentStatus'] = req.query.paymentStatus;
+    }
+    
+    // Add date range filters if provided
+    if (req.query.startDate || req.query.endDate) {
+      filter.completedAt = {};
+      if (req.query.startDate) {
+        filter.completedAt.$gte = new Date(req.query.startDate);
+      }
+      if (req.query.endDate) {
+        filter.completedAt.$lte = new Date(req.query.endDate);
+      }
+    }
+    
+    // Pagination
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const skip = (page - 1) * limit;
+    
+    // Sorting
+    const sortBy = req.query.sortBy || 'completedAt';
+    const sortOrder = req.query.sortOrder === 'asc' ? 1 : -1;
+    const sort = { [sortBy]: sortOrder };
+    
+    // Get completed gigs with populated data
+    const completedGigs = await GigCompletion.find(filter)
+      .populate({
+        path: 'gigRequest',
+        select: 'title category location payRate totalPositions filledPositions createdAt'
+      })
+      .populate({
+        path: 'workers.worker',
+        select: 'firstName lastName email profilePicture'
       })
       .sort(sort)
       .skip(skip)
@@ -1169,19 +1292,189 @@ exports.getMyCompletions = async (req, res) => {
     
     res.status(200).json({
       success: true,
-      count: completions.length,
+      count: completedGigs.length,
       total,
       page,
       pages: Math.ceil(total / limit),
+      data: completedGigs
+    });
+  } catch (error) {
+    console.error('Error getting employer completed gigs:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to get employer completed gigs',
+      error: error.message
+    });
+  }
+};
+
+/**
+ * Recalculate payments for a gig completion
+ * POST /api/gig-completions/:id/recalculate-payments
+ */
+exports.recalculatePayments = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Validate ID
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid completion ID'
+      });
+    }
+
+    // Find the completion record
+    const gigCompletion = await GigCompletion.findById(id).populate('gigRequest');
+    if (!gigCompletion) {
+      return res.status(404).json({
+        success: false,
+        message: 'Gig completion record not found'
+      });
+    }
+
+    // Check if the user is authorized (employer or admin)
+    if (req.userType === 'employer' && gigCompletion.employer.toString() !== req.user._id.toString()) {
+      return res.status(403).json({
+        success: false,
+        message: 'Not authorized to recalculate payments for this gig'
+      });
+    }
+
+    // Recalculate all worker payments
+    gigCompletion.workers.forEach(worker => {
+      // Ensure the worker has proper payment calculation details
+      if (!worker.payment.calculationDetails.baseRate && gigCompletion.gigRequest.payRate) {
+        worker.payment.calculationDetails.baseRate = gigCompletion.gigRequest.payRate.amount;
+        worker.payment.calculationDetails.rateType = gigCompletion.gigRequest.payRate.rateType;
+        worker.payment.calculationDetails.overtimeRate = gigCompletion.gigRequest.payRate.amount * 1.5;
+      }
+      
+      const baseRate = worker.payment.calculationDetails.baseRate || 0;
+      const rateType = worker.payment.calculationDetails.rateType || 'hourly';
+      
+      // If worker has no completed time slots, calculate based on job type
+      if (!worker.completedTimeSlots || worker.completedTimeSlots.length === 0) {
+        if (rateType === 'fixed') {
+          worker.payment.amount = baseRate;
+        } else if (rateType === 'hourly') {
+          // Default to 8 hours if no time slots are specified
+          worker.payment.amount = baseRate * 8;
+          worker.payment.calculationDetails.totalHours = 8;
+        } else if (rateType === 'daily') {
+          worker.payment.amount = baseRate;
+        }
+      } else {
+        // Calculate based on actual time slots
+        gigCompletion.calculateWorkerPayment(worker.worker);
+      }
+    });
+
+    await gigCompletion.save();
+
+    res.status(200).json({
+      success: true,
+      message: 'Payments recalculated successfully',
       data: {
-        completions
+        paymentSummary: gigCompletion.paymentSummary,
+        workers: gigCompletion.workers.map(worker => ({
+          worker: worker.worker,
+          payment: worker.payment
+        }))
       }
     });
   } catch (error) {
-    console.error('Error getting user completions:', error);
+    console.error('Error recalculating payments:', error);
     res.status(500).json({
       success: false,
-      message: 'Failed to get user completions',
+      message: 'Error recalculating payments',
+      error: error.message
+    });
+  }
+};
+
+/**
+ * Admin endpoint to fix zero payment amounts across all gig completions
+ * POST /api/gig-completions/admin/fix-zero-payments
+ */
+exports.fixZeroPayments = async (req, res) => {
+  try {
+    // Find all completed gig completions with potential zero payments
+    const completions = await GigCompletion.find({
+      status: { $in: ['completed', 'verified'] }
+    }).populate('gigRequest');
+    
+    let fixedCount = 0;
+    const fixedCompletions = [];
+    
+    for (const completion of completions) {
+      let needsUpdate = false;
+      
+      // Check if any worker has zero payment amount
+      const zeroPaymentWorkers = completion.workers.filter(worker => 
+        worker.payment.amount === 0 || !worker.payment.amount
+      );
+      
+      if (zeroPaymentWorkers.length > 0) {
+        // Fix each worker's payment
+        completion.workers.forEach(worker => {
+          if (worker.payment.amount === 0 || !worker.payment.amount) {
+            // Get base rate from the original job
+            const baseRate = completion.gigRequest?.payRate?.amount || 0;
+            const rateType = completion.gigRequest?.payRate?.rateType || 'hourly';
+            
+            // Update calculation details if missing
+            if (!worker.payment.calculationDetails.baseRate) {
+              worker.payment.calculationDetails.baseRate = baseRate;
+              worker.payment.calculationDetails.rateType = rateType;
+              worker.payment.calculationDetails.overtimeRate = baseRate * 1.5;
+            }
+            
+            // Calculate payment based on rate type
+            if (rateType === 'fixed') {
+              worker.payment.amount = baseRate;
+            } else if (rateType === 'hourly') {
+              // If has time slots, calculate from them, otherwise default to 8 hours
+              if (worker.completedTimeSlots && worker.completedTimeSlots.length > 0) {
+                completion.calculateWorkerPayment(worker.worker);
+              } else {
+                worker.payment.amount = baseRate * 8; // Default 8 hours
+                worker.payment.calculationDetails.totalHours = 8;
+              }
+            } else if (rateType === 'daily') {
+              worker.payment.amount = baseRate;
+            }
+            
+            needsUpdate = true;
+          }
+        });
+        
+        if (needsUpdate) {
+          await completion.save();
+          fixedCount++;
+          fixedCompletions.push({
+            id: completion._id,
+            gigTitle: completion.gigRequest?.title || 'Unknown',
+            workersFixed: zeroPaymentWorkers.length
+          });
+        }
+      }
+    }
+    
+    res.status(200).json({
+      success: true,
+      message: `Fixed ${fixedCount} gig completions with zero payment amounts`,
+      data: {
+        totalFixed: fixedCount,
+        totalChecked: completions.length,
+        fixedCompletions
+      }
+    });
+  } catch (error) {
+    console.error('Error fixing zero payments:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error fixing zero payments',
       error: error.message
     });
   }

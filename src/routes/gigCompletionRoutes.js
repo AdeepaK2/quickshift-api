@@ -1,11 +1,14 @@
 const express = require('express');
 const gigCompletionController = require('../controllers/gigCompletionController');
-const { protect } = require('../middleware/auth');
+const { protect, authorize } = require('../middleware/auth');
 const router = express.Router();
 
 // Protected routes for authenticated users
 // Get current user's gig completions
 router.get('/my-completions', protect, gigCompletionController.getMyCompletions);
+
+// Get employer's completed gigs
+router.get('/employer/completed', protect, authorize('employer'), gigCompletionController.getEmployerCompletedGigs);
 
 // Initialize a gig completion record
 router.post('/initialize', gigCompletionController.initializeGigCompletion);
@@ -29,6 +32,12 @@ router.get('/worker-account-status/:userId', gigCompletionController.checkWorker
 
 // Mark gig as completed
 router.put('/:id/complete', gigCompletionController.completeGig);
+
+// Recalculate payments for a gig completion
+router.post('/:id/recalculate-payments', protect, gigCompletionController.recalculatePayments);
+
+// Admin endpoint to fix zero payment amounts
+router.post('/admin/fix-zero-payments', protect, authorize('admin'), gigCompletionController.fixZeroPayments);
 
 // Get all gig completions (with optional filters)
 router.get('/', gigCompletionController.getAllGigCompletions);
