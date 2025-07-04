@@ -127,7 +127,7 @@ const gigRequestSchema = new mongoose.Schema({
   status: {
     type: String,
     required: true,
-    enum: ['draft', 'active', 'closed', 'completed', 'cancelled'],
+    enum: ['draft', 'active', 'closed', 'filled', 'in_progress', 'completed', 'cancelled'],
     default: 'active'
   },
   
