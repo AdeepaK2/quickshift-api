@@ -14,6 +14,11 @@ router.get('/profile', adminController.getCurrentAdminProfile); // Get current a
 router.get('/dashboard', adminController.getDashboardStats);
 router.get('/users', adminController.getAllUsersForAdmin);
 router.get('/employers', adminController.getAllEmployersForAdmin);
+router.get('/gigs', adminController.getAllGigsForAdmin);
+
+// Employer management routes
+router.patch('/employers/:id/activate', adminController.activateEmployer);
+router.patch('/employers/:id/deactivate', adminController.deactivateEmployer);
 
 // Platform settings routes
 router.get('/settings/platform', adminController.getPlatformSettings);
