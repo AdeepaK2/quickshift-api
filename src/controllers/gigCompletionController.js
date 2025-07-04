@@ -1479,3 +1479,86 @@ exports.fixZeroPayments = async (req, res) => {
     });
   }
 };
+
+/**
+ * Get payment statistics for current user
+ * GET /api/gig-completions/payment-stats
+ */
+exports.getPaymentStats = async (req, res) => {
+  try {
+    const userId = req.user._id;
+    
+    // Get all user's completed gigs
+    const completions = await GigCompletion.find({
+      'workers.worker': userId,
+      status: { $in: ['completed', 'verified'] }
+    }).populate('gigRequest', 'title');
+    
+    let totalPaid = 0;
+    let pendingAmount = 0;
+    let thisMonthEarnings = 0;
+    const paymentHistory = [];
+    
+    const currentDate = new Date();
+    const startOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
+    
+    completions.forEach(completion => {
+      const userWorker = completion.workers.find(w => w.worker.toString() === userId.toString());
+      if (userWorker) {
+        const amount = userWorker.payment.amount || 0;
+        
+        if (userWorker.payment.status === 'paid') {
+          totalPaid += amount;
+          
+          // Check if payment was made this month
+          if (userWorker.payment.paymentDate && new Date(userWorker.payment.paymentDate) >= startOfMonth) {
+            thisMonthEarnings += amount;
+          }
+        } else if (userWorker.payment.status === 'pending' || userWorker.payment.status === 'processing') {
+          pendingAmount += amount;
+        }
+      }
+    });
+    
+    // Generate payment history by month (last 6 months)
+    for (let i = 0; i < 6; i++) {
+      const date = new Date();
+      date.setMonth(date.getMonth() - i);
+      const monthStart = new Date(date.getFullYear(), date.getMonth(), 1);
+      const monthEnd = new Date(date.getFullYear(), date.getMonth() + 1, 0);
+      
+      let monthAmount = 0;
+      completions.forEach(completion => {
+        const userWorker = completion.workers.find(w => w.worker.toString() === userId.toString());
+        if (userWorker && userWorker.payment.status === 'paid' && userWorker.payment.paymentDate) {
+          const paymentDate = new Date(userWorker.payment.paymentDate);
+          if (paymentDate >= monthStart && paymentDate <= monthEnd) {
+            monthAmount += userWorker.payment.amount || 0;
+          }
+        }
+      });
+      
+      paymentHistory.unshift({
+        month: date.toLocaleString('default', { month: 'short', year: 'numeric' }),
+        amount: monthAmount
+      });
+    }
+    
+    res.status(200).json({
+      success: true,
+      data: {
+        totalPaid,
+        pendingAmount,
+        thisMonthEarnings,
+        paymentHistory
+      }
+    });
+  } catch (error) {
+    console.error('Error getting payment stats:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to get payment statistics',
+      error: error.message
+    });
+  }
+};

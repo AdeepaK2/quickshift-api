@@ -39,6 +39,9 @@ router.post('/:id/recalculate-payments', protect, gigCompletionController.recalc
 // Admin endpoint to fix zero payment amounts
 router.post('/admin/fix-zero-payments', protect, authorize('admin'), gigCompletionController.fixZeroPayments);
 
+// Get current user's payment statistics (must come before /:id route)
+router.get('/payment-stats', protect, gigCompletionController.getPaymentStats);
+
 // Get all gig completions (with optional filters)
 router.get('/', gigCompletionController.getAllGigCompletions);
 
