@@ -15,8 +15,8 @@ app.use((err, req, res, next) => {
   });
 });
 
-// Define port - DigitalOcean uses PORT 8080 by default
-const PORT = process.env.PORT || 8080;
+// Define port - Use port 5000 for local development, 8080 for production (DigitalOcean)
+const PORT = process.env.NODE_ENV === 'production' ? (process.env.PORT || 8080) : 5000;
 
 // Start server
 const server = app.listen(PORT, '0.0.0.0', () => {

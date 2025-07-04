@@ -79,6 +79,27 @@ exports.authorize = (...roles) => {
       });
     }
     
+    // For admins - check if admin or super_admin roles are allowed
+    if (req.userType === 'admin') {
+      const adminRoles = ['admin', 'super_admin'];
+      const hasAdminRole = roles.some(role => adminRoles.includes(role));
+      
+      if (!hasAdminRole) {
+        return res.status(403).json({
+          success: false,
+          message: 'Admin access not authorized for this route'
+        });
+      }
+      
+      // If specific admin role is required, check it
+      if (roles.includes('super_admin') && !roles.includes('admin') && req.user.role !== 'super_admin') {
+        return res.status(403).json({
+          success: false,
+          message: 'Super admin access required'
+        });
+      }
+    }
+    
     next();
   };
 };

@@ -127,8 +127,8 @@ const gigRequestSchema = new mongoose.Schema({
   status: {
     type: String,
     required: true,
-    enum: ['draft', 'open', 'in_progress', 'completed', 'cancelled'],
-    default: 'open'
+    enum: ['draft', 'active', 'closed', 'filled', 'in_progress', 'completed', 'cancelled'],
+    default: 'active'
   },
   
   // Application management
@@ -194,7 +194,7 @@ gigRequestSchema.index({ 'location.coordinates': '2dsphere' });
 
 // Method to check if gig is still accepting applications
 gigRequestSchema.methods.isAcceptingApplications = function() {
-  return this.status === 'open' && 
+  return this.status === 'active' && 
          this.filledPositions < this.totalPositions && 
          (!this.applicationDeadline || new Date() < this.applicationDeadline);
 };

@@ -38,8 +38,8 @@ const gigApplySchema = new mongoose.Schema({
   // Application status
   status: {
     type: String,
-    enum: ['applied', 'shortlisted', 'hired', 'rejected'],
-    default: 'applied'
+    enum: ['pending', 'reviewed', 'accepted', 'rejected', 'withdrawn'],
+    default: 'pending'
   },
   
   // Cover letter or additional information
@@ -84,7 +84,7 @@ gigApplySchema.index({ user: 1, gigRequest: 1 }, { unique: true });
 
 // Method to check if application can be modified
 gigApplySchema.methods.canBeModified = function() {
-  return ['applied', 'shortlisted'].includes(this.status);
+  return ['pending', 'reviewed'].includes(this.status);
 };
 
 const GigApply = mongoose.model('GigApply', gigApplySchema);
