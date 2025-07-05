@@ -180,50 +180,72 @@ exports.getUserStats = async (req, res) => {
     const GigCompletion = require('../models/gigCompletion');
     const Rating = require('../models/rating');
     
+    // Count applications
     const appliedJobs = await GigApply.countDocuments({ user: userId });
+    
+    // Count active gigs (looking in workers array for in_progress gigs)
     const activeGigs = await GigCompletion.countDocuments({ 
-      user: userId, 
+      'workers.worker': userId, 
       status: { $in: ['confirmed', 'in_progress'] }
     });
+    
+    // Count completed gigs (looking in workers array for completed gigs)
     const completedGigs = await GigCompletion.countDocuments({ 
-      user: userId, 
+      'workers.worker': userId, 
       status: 'completed' 
     });
     
     // Calculate total earnings from completed gigs
     const completedGigsData = await GigCompletion.find({ 
-      user: userId, 
+      'workers.worker': userId, 
       status: 'completed' 
-    }).populate('gigRequest', 'payRate');
+    });
     
-    const totalEarnings = completedGigsData.reduce((sum, gig) => {
-      return sum + (gig.gigRequest?.payRate?.amount || 0);
-    }, 0);
+    let totalEarnings = 0;
+    let monthlyEarnings = 0;
     
-    // Calculate monthly earnings (current month)
+    // Calculate earnings from payment data in workers array
     const currentDate = new Date();
     const startOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
-    const monthlyCompletedGigs = await GigCompletion.find({ 
-      user: userId, 
-      status: 'completed',
-      completionDate: { $gte: startOfMonth }
-    }).populate('gigRequest', 'payRate');
     
-    const monthlyEarnings = monthlyCompletedGigs.reduce((sum, gig) => {
-      return sum + (gig.gigRequest?.payRate?.amount || 0);
-    }, 0);
+    completedGigsData.forEach(completion => {
+      completion.workers.forEach(worker => {
+        if (worker.worker.toString() === userId.toString()) {
+          const amount = worker.payment?.amount || 0;
+          totalEarnings += amount;
+          
+          // Check if completed this month
+          if (completion.completedAt && completion.completedAt >= startOfMonth) {
+            monthlyEarnings += amount;
+          }
+        }
+      });
+    });
     
-    // Get user's average rating
-    const userRatings = await Rating.find({ ratedUser: userId });
+    // Get user's average rating (correct field names)
+    const userRatings = await Rating.find({ 
+      ratee: userId,
+      rateeType: 'user'
+    });
+    
     const avgRating = userRatings.length > 0 
       ? userRatings.reduce((sum, rating) => sum + rating.rating, 0) / userRatings.length 
       : 0;
     
     // Count pending payments (completed but not yet paid)
-    const pendingPayments = await GigCompletion.countDocuments({
-      user: userId,
-      status: 'completed',
-      paymentStatus: { $ne: 'paid' }
+    const pendingPaymentsData = await GigCompletion.find({
+      'workers.worker': userId,
+      status: 'completed'
+    });
+    
+    let pendingPayments = 0;
+    pendingPaymentsData.forEach(completion => {
+      completion.workers.forEach(worker => {
+        if (worker.worker.toString() === userId.toString() && 
+            worker.payment?.status !== 'paid') {
+          pendingPayments++;
+        }
+      });
     });
     
     res.status(200).json({
